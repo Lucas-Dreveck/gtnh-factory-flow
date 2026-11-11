@@ -1,0 +1,38 @@
+# Production stack behind a Cloudflare Tunnel (gtnh.dechotti.com.br). See deploy/SELFHOST.md.
+#   node tools/mirror-dataset.mjs
+#   docker compose -f docker-compose.production.yml up -d --build
+#   docker compose -f docker-compose.production.yml logs planner   # one-time ADMIN invite code
+# The project name is fixed so this stack never shares containers, networks or volumes with
+# any other compose project on the host.
+name: gtnh-planner
+
+services:
+  planner:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.selfhost
+      target: runtime
+    restart: unless-stopped
+    # Loopback only: cloudflared on this host is the single way in. The host port is not 3000
+    # because other services on the machine use it.
+    ports:
+      - "127.0.0.1:${GTNH_HOST_PORT:-3100}:3000"
+    environment:
+      GTNH_COOKIE_SECURE: "1"          # the tunnel serves HTTPS
+      GTNH_ALLOWED_HOSTS: "${GTNH_PUBLIC_HOST:-gtnh.dechotti.com.br},localhost:${GTNH_HOST_PORT:-3100},127.0.0.1:${GTNH_HOST_PORT:-3100}"
+      GTNH_TRUST_PROXY: "0"            # 1 only once client IPs behind the tunnel are verified to arrive in X-Forwarded-For
+      GTNH_BACKUP_HOURS: "24"
+      GTNH_BACKUP_KEEP: "14"
+      NODE_OPTIONS: "--max-old-space-size=2048"
+    volumes:
+      - planner-data:/data
+      - ./public/datasets/gtnh:/app/public/datasets/gtnh:ro
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777
+      - /app/.next/cache:mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+volumes:
+  planner-data:
