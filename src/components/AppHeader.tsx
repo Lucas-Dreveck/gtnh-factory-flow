@@ -2,13 +2,12 @@
 
 import "./app-chrome.css";
 
-import { Settings } from "lucide-react";
+import { Settings, Split } from "lucide-react";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { OPEN_SHARE_DIALOG_EVENT } from "@/lib/setups-tab";
 import { useIsCompactViewport } from "@/lib/compact-view";
 import { markNotesReadAndNotify, subscribeToNotesRead, unseenEntries } from "@/lib/whats-new";
 import { ChangelogDialog } from "./ChangelogDialog";
-import { ModAnnouncement } from "./ModAnnouncement";
 import { APP_VERSION } from "@/lib/version";
 import { AccountMenu } from "./community/AccountMenu";
 import { SharePlanDialog } from "./community/SharePlanDialog";
@@ -19,7 +18,12 @@ import { BoardActions } from "./BoardActions";
 import { ExportImageDialog } from "./export/ExportImageDialog";
 import { DevMenu } from "./DevMenu";
 import { SettingsDialog } from "./SettingsDialog";
-import { HeaderLinks, SupportButton } from "./HeaderLinks";
+import { NewRouteDialog } from "./routes/NewRouteDialog";
+import { FindRoutesDialog } from "./routes/FindRoutesDialog";
+import { RoutesDialog } from "./routes/RoutesDialog";
+import { useRouteUi } from "./routes/route-ui-store";
+import { useFactoryStore } from "@/store/factory-store";
+import { HeaderLinks } from "./HeaderLinks";
 
 /**
  * The pack picker's switch. See the note where it renders; flip this back to
@@ -69,6 +73,7 @@ export function AppHeader({ onLoadDatasetVersion }: AppHeaderProps) {
   // one menu — see AppMenu for why a bar that overflows costs a phone more than
   // the buttons that fall off the end of it.
   const isCompact = useIsCompactViewport();
+  const routeCount = useFactoryStore((state) => state.project.routeChoices?.length ?? 0);
 
   return (
     <header className="app-header relative flex h-[30px] shrink-0 items-center justify-between gap-3 border-b border-line bg-surface px-3 compact:h-auto compact:flex-wrap compact:gap-y-0">
@@ -121,16 +126,16 @@ export function AppHeader({ onLoadDatasetVersion }: AppHeaderProps) {
       {isChangelogOpen ? (
         <ChangelogDialog unseenVersions={unseenVersions} onClose={() => setChangelogOpen(false)} />
       ) : null}
-      {/* The one popup that opens by itself, once per browser. */}
-      <ModAnnouncement />
       {isDevMenuOpen ? <DevMenu onClose={() => setDevMenuOpen(false)} /> : null}
       {isShareOpen ? <SharePlanDialog onClose={() => setShareOpen(false)} /> : null}
       {isExportOpen ? <ExportImageDialog onClose={() => setExportOpen(false)} /> : null}
+      <RoutesDialog />
+      <FindRoutesDialog />
+      <NewRouteDialog />
       {isSettingsOpen ? <SettingsDialog onClose={() => setSettingsOpen(false)} /> : null}
       {isCompact ? (
         <AppMenu
           onLoadDatasetVersion={onLoadDatasetVersion}
-          onShare={() => setShareOpen(true)}
           onExportImage={() => setExportOpen(true)}
           onOpenSettings={() => setSettingsOpen(true)}
         />
@@ -138,10 +143,17 @@ export function AppHeader({ onLoadDatasetVersion }: AppHeaderProps) {
         // The global `font: inherit` reset outranks any text-* on a button, so
         // the cluster sets the one size every control in it renders at.
         <div className="app-header-tools flex shrink-0 items-center gap-3 text-xs">
-          <BoardActions
-            onShare={() => setShareOpen(true)}
-            onExportImage={() => setExportOpen(true)}
-          />
+          <BoardActions onExportImage={() => setExportOpen(true)} />
+          <button
+            type="button"
+            onClick={() => useRouteUi.getState().openPanel()}
+            title="Route alternatives"
+            aria-label={routeCount > 0 ? `Open route alternatives (${routeCount})` : "Open route alternatives"}
+            className="inline-flex h-5 items-center justify-center gap-1 rounded border border-line-strong bg-surface px-1 text-fg-subtle hover:bg-surface-raised hover:text-fg"
+          >
+            <Split className="h-3.5 w-3.5" />
+            {routeCount > 0 ? <span className="tabular-nums">{routeCount}</span> : null}
+          </button>
           {/* Settings is a plain utility square, not a coloured call to action. */}
           <button
             type="button"
@@ -152,7 +164,6 @@ export function AppHeader({ onLoadDatasetVersion }: AppHeaderProps) {
           >
             <Settings className="h-3.5 w-3.5" />
           </button>
-          <SupportButton />
           <HeaderLinks />
           {/* No What's new button: the version chip opens the notes and wears
               the unread dot. */}

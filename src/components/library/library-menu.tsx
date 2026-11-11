@@ -20,12 +20,15 @@ export function LibraryMenu({
   label,
   onClose,
   children,
+  width = MENU_WIDTH,
 }: {
   left: number;
   top: number;
   label: string;
   onClose: () => void;
   children: ReactNode;
+  /** Wider than the default for menus whose entries carry names. */
+  width?: number;
 }) {
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -40,7 +43,7 @@ export function LibraryMenu({
   // Shell pixels: a body portal wearing .ui-zoom positions in shell pixels, so
   // the real-pixel anchor and window are divided by the interface scale.
   const scale = getUiScale();
-  const clampedLeft = Math.min(left / scale, window.innerWidth / scale - MENU_WIDTH - 8);
+  const clampedLeft = Math.min(left / scale, window.innerWidth / scale - width - 8);
   const clampedTop = Math.min(top / scale, window.innerHeight / scale - 360);
 
   return createPortal(
@@ -48,7 +51,7 @@ export function LibraryMenu({
       ref={menuRef}
       role="menu"
       aria-label={label}
-      style={{ left: clampedLeft, top: Math.max(8, clampedTop), width: MENU_WIDTH }}
+      style={{ left: clampedLeft, top: Math.max(8, clampedTop), width }}
       className="ui-zoom fixed z-[100] max-h-[340px] overflow-y-auto border-2 border-[var(--mc-15)] bg-[var(--mc-47)] py-0.5 shadow-[6px_6px_0_rgba(0,0,0,0.45)]"
     >
       {children}

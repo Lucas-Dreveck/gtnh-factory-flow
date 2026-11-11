@@ -38,5 +38,9 @@ export const useCommunityAuthStore = create<CommunityAuthStore>((set, get) => ({
   signOut: async () => {
     await logoutCommunityUser();
     set({ user: undefined });
+    // Every page needs a session on this instance: sign-out leaves for the sign-in page.
+    if (typeof window !== "undefined") {
+      window.location.assign("/login");
+    }
   },
 }));

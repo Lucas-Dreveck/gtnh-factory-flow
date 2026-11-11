@@ -632,6 +632,7 @@ function finalizeSolveModeResult(
     externalInputs,
     unconsumedOutputs,
     generatedAt: options.generatedAt ?? project.metadata?.updatedAt ?? "unspecified",
+    solveStatus: { pinsInfeasible: solved.pinsInfeasible === true, failed: solved.status === "failed" },
   };
 }
 

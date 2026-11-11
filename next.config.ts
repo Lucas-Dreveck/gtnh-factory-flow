@@ -2,10 +2,20 @@ import type { NextConfig } from "next";
 
 const datasetBackendUrl = process.env.GTNH_DATASET_BACKEND_URL?.replace(/\/+$/, "");
 
+// Normally the repo. Set it to a parent directory when public/datasets/gtnh is a symlink
+// pointing outside the repo, which Turbopack refuses to trace.
+const tracingRoot = process.env.GTNH_TRACING_ROOT ?? process.cwd();
+
 const nextConfig: NextConfig = {
-  outputFileTracingRoot: process.cwd(),
+  output: "standalone",
+  poweredByHeader: false,
+  experimental: {
+    // The proxy buffers request bodies; plan uploads run to 32 MB and must never be cut short.
+    proxyClientMaxBodySize: "64mb",
+  },
+  outputFileTracingRoot: tracingRoot,
   turbopack: {
-    root: process.cwd(),
+    root: tracingRoot,
   },
   async headers() {
     return [
@@ -33,23 +43,8 @@ const nextConfig: NextConfig = {
     ];
   },
   async rewrites() {
-    const appRewrites = [
-      {
-        source: "/umami",
-        destination: "http://127.0.0.1:8582/umami",
-      },
-      {
-        source: "/umami/:path*",
-        destination: "http://127.0.0.1:8582/umami/:path*",
-      },
-      {
-        source: "/_umami/:path*",
-        destination: "http://127.0.0.1:8582/umami/:path*",
-      },
-    ];
-
     if (!datasetBackendUrl) {
-      return appRewrites;
+      return [];
     }
 
     return {
@@ -63,7 +58,7 @@ const nextConfig: NextConfig = {
           destination: `${datasetBackendUrl}/datasets/gtnh/:path*`,
         },
       ],
-      afterFiles: appRewrites,
+      afterFiles: [],
     };
   },
 };

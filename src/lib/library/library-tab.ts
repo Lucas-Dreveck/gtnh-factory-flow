@@ -44,7 +44,8 @@ function isLibraryView(value: unknown): value is LibraryView {
   if (kind === "folder") {
     return typeof (value as { folderId?: unknown }).folderId === "string";
   }
-  return kind === "all" || kind === "favorites" || kind === "public" || kind === "saved";
+  // "public" and "saved" browsed the community hub, which this instance does not have.
+  return kind === "all" || kind === "favorites";
 }
 
 function readStored(): LibraryTabState {

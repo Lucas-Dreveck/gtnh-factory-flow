@@ -57,6 +57,18 @@ async function loadNodeHighs(wasmUrl?: string): Promise<HighsInstance> {
  * the wrapper returns.
  */
 async function loadBrowserHighs(glueUrl: string, wasmUrl?: string): Promise<HighsInstance> {
+  type HighsFactory = (options?: { locateFile?: (file: string) => string }) => Promise<HighsInstance>;
+  // In a classic worker, importScripts runs the UMD glue as a script, so its
+  // top-level `var Module` lands on the worker global - no eval needed, and
+  // the Content-Security-Policy can forbid 'unsafe-eval'.
+  const scope = globalThis as unknown as { importScripts?: (url: string) => void; Module?: HighsFactory };
+  if (typeof scope.importScripts === "function") {
+    scope.importScripts(glueUrl);
+    if (typeof scope.Module !== "function") {
+      throw new Error(`${glueUrl} did not define its Module factory.`);
+    }
+    return scope.Module(wasmUrl ? { locateFile: () => wasmUrl } : undefined);
+  }
   const response = await fetch(glueUrl);
   if (!response.ok) {
     throw new Error(`Could not fetch ${glueUrl} (${response.status}).`);

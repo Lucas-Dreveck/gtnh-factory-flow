@@ -1,0 +1,21 @@
+/* Route alternatives (FactoryProject.routeChoices): the options the plan is
+   not running stay on the board, dimmed, with a badge naming them. The badge
+   text is a per-id rule written by FactoryFlow. */
+.react-flow__node.route-off {
+  opacity: 0.45;
+  filter: grayscale(0.6);
+}
+.react-flow__node.route-off::after {
+  position: absolute;
+  top: -9px;
+  left: 4px;
+  padding: 0 4px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 14px;
+  white-space: nowrap;
+  color: #fde68a;
+  background: rgba(24, 24, 27, 0.92);
+  border: 1px solid rgba(251, 191, 36, 0.6);
+  pointer-events: none;
+}

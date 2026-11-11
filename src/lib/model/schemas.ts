@@ -533,7 +533,24 @@ export const planViewStateSchema = z.object({
   favouriteResourceKeys: z.array(z.string()).optional(),
 });
 
+export const routeOptionSchema = z.object({
+  id: z.string().min(1),
+  label: z.string(),
+  nodeIds: z.array(z.string()),
+  storageIds: z.array(z.string()),
+  origin: z.enum(["manual", "discovered"]).optional(),
+});
+
+export const routeChoiceSchema = z.object({
+  id: z.string().min(1),
+  name: z.string(),
+  options: z.array(routeOptionSchema),
+  active: z.string().min(1),
+  createdAt: z.string(),
+});
+
 export const factoryProjectSchema = z.object({
+  routeChoices: z.array(routeChoiceSchema).optional(),
   productionGroups: z.array(z.object({
     id: z.string().min(1), name: z.string().min(1), parentId: z.string().min(1).optional(),
     resourceRules: z.record(z.string(), z.enum(["share", "import"])).optional(),

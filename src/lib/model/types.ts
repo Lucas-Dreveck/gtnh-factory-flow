@@ -713,7 +713,36 @@ export interface ProductionGroup {
   resourceRules?: Record<string, PoolResourceRule>;
 }
 
+/** One way to make the same result; see `RouteChoice`. */
+export interface RouteOption {
+  id: string;
+  /** "A: Electrolyzer", "B: Salt water" */
+  label: string;
+  /** Cards belonging only to this route. */
+  nodeIds: string[];
+  /** Drawers belonging only to this route (may be empty). */
+  storageIds: string[];
+  origin?: "manual" | "discovered";
+}
+
+/**
+ * Two or more routes to one result, built side by side on the board. Only the
+ * `active` option runs; `"solver"` leaves every option on and lets the LP pick
+ * or mix. The cards' own `enabled` flags are never rewritten by this.
+ */
+export interface RouteChoice {
+  id: string;
+  name: string;
+  /** 2..6 options. */
+  options: RouteOption[];
+  /** An option id, or "solver" = all options enabled. */
+  active: string;
+  createdAt: string;
+}
+
 export interface FactoryProject {
+  /** Route alternatives inside this plan; see `RouteChoice`. */
+  routeChoices?: RouteChoice[];
   productionGroups?: ProductionGroup[];
   poolResourceRules?: Record<string, PoolResourceRule>;
   /** Construction progress; never changes production. */
@@ -977,6 +1006,11 @@ export interface ThroughputResult {
    * computes it beside the books and `findClogLocks` serves it from here.
    */
   clogLocks?: ClogLockIndex;
+  /**
+   * Solve and Pool only: how the count solve itself ended, so the board can
+   * say why a result is empty. Absent in Build.
+   */
+  solveStatus?: { pinsInfeasible: boolean; failed: boolean };
 }
 
 export interface ClogLockVent {

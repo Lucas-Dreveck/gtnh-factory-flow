@@ -65,3 +65,11 @@ dev-server*.log
 next-env.d.ts
 public/highs.wasm
 public/highs.js
+
+# self-host
+/dist/
+/var/
+/src/scratch/
+
+# scratch harnesses stay local
+*.local.test.ts

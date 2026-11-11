@@ -20,6 +20,7 @@ import { useFactoryStore } from "@/store/factory-store";
 import { SharePlanDialog } from "@/components/community/SharePlanDialog";
 import { ScreenshotButton } from "@/components/export/ScreenshotButton";
 import { CopyPlanButton } from "@/components/export/CopyPlanButton";
+import { HistoryButton } from "@/components/history/HistoryPanel";
 import { EntryIconSlot, IconPicker, iconSuggestionsFromStats } from "@/components/IconPicker";
 import { formatRelativeDate } from "@/components/shelf-cards";
 
@@ -148,6 +149,7 @@ export function PlanIdentityDrawer() {
         )}
         <ScreenshotButton />
         <CopyPlanButton />
+        <HistoryButton />
       </div>
       {isSharing ? <SharePlanDialog onClose={() => setSharing(false)} /> : null}
 

@@ -1,3 +1,19 @@
+# GTNH Planner (private self-host fork)
+
+A self-hosted fork of [jackwrichards/gtnh-factory-flow](https://github.com/jackwrichards/gtnh-factory-flow)
+at **3.11.1** (the last release before the 4.x rework), with GTNH 2.9.0 recipe data and:
+
+- **Private by design:** invite-only local accounts (SQLite), every page behind sign-in, CSRF and
+  security headers, no telemetry, no Supabase, no third-party calls.
+- **Plans never lost:** every save is an immutable revision; checkpoints, restore, branches,
+  automatic guard checkpoints when many cards vanish, conflicts kept instead of dropped, daily backups.
+- **"Why no result?"** diagnostics in Solve/Pool (missing goals, clashing pins, bare inputs).
+- **Route alternatives:** compare routes on the whole plan, and **find other routes** from the dataset.
+
+Run it: [deploy/SELFHOST.md](deploy/SELFHOST.md).
+
+---
+
 # GTNH Factory Flow
 
 A production-chain planner for GregTech: New Horizons, live at

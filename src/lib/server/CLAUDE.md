@@ -20,32 +20,13 @@
   site: check the heap first.
 - The OG card route reads fonts through `process.cwd()` (non-standalone build).
 
-## Supabase (community.ts, resource-popularity.ts)
+## Private instance storage (src/lib/server/local, src/proxy.ts)
 
-The instance is small and has gone down under load. Rules:
-- Every request goes through `fetchWithDbTimeout` (20 s) and aborts with a plain
-  AbortError; postgrest-js retries other failures three more times.
-- Nothing a page needs to render may await a community sweep. `getResourcePopularity`
-  answers at once with the last good map (sweep every 6 h, retry after 30 min on failure).
-- The design PUT refuses what it can without the database (size, JSON, name, stamps)
-  before the rate limit's two queries; the plan schema check follows.
-- Read community plan jsonb about 10 rows per statement, or it hits the statement timeout.
-- The dashboard (restarts, disk IO, memory) needs the repo owner; there is no management
-  token here.
+- Accounts, sessions, invites, the library and every plan revision live in one SQLite file under `GTNH_DATA_DIR`
+  (`db.ts`). `auth.ts` owns sign-in; `library-store.ts` owns designs and history. Their tests pin the rules.
+- `src/proxy.ts` requires a session for every path except the sign-in surface, checks Origin/Host on writes, and sets
+  the security headers (CSP allows 'unsafe-eval' only because HiGHS glue is loaded with `new Function`).
+- Routes return fixed error sentences; detail goes to the server log. The community hub, blueprints, feedback and
+  telemetry are gone; `resource-popularity.ts` is an always-empty map.
+- If `public/datasets/gtnh` is a symlink outside the repo, build with `GTNH_TRACING_ROOT=<parent dir>`.
 
-## Feedback from the game (feedback.ts, app/api/feedback)
-
-- The in-game planner's Feedback box posts to `/api/feedback`; each report becomes an issue on
-  `jackwrichards/gtnh-planner-mod` through `GITHUB_FEEDBACK_TOKEN` (in `/opt/shared/env.local`; without it the route
-  answers 503).
-- It was flooded on 2026-10-12 (450 spam issues from about 5,000 residential addresses, the mod's user agent, made-up
-  versions), so `feedback-guard.ts` stands in front: the mod's shapes (device id, versions), an in-memory gate (30
-  a minute; 60 refusals in 10 minutes pause reports for 6 hours), 3 an hour and 10 a day per address and per device,
-  the same words once a month, and at most 10 issues an hour and 40 a day for the whole site. Player text is escaped
-  (no pictures, links or HTML in the issue).
-- The client address is Caddy's `X-Client-Ip` (Cloudflare's CF-Connecting-IP, trusted only from Cloudflare's
-  ranges), then CF-Connecting-IP; X-Forwarded-For names a Cloudflare edge (`clientAddress` in community.ts).
-- Emergency stop without a deploy: a Caddy rule answering 503 to `POST /api/feedback` (`/etc/caddy/Caddyfile`, then
-  `systemctl reload caddy`).
-- Plans and the picture go to the private `feedback-files` bucket, served by `/api/feedback/files/<id>/<file>`, only
-  once every check has passed. The mod strips names, paths and addresses from logs and crash reports before sending.

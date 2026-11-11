@@ -38,7 +38,6 @@ import { SharedAddressSync } from "./SharedAddressSync";
 import { PublicViewBar } from "./community/PublicViewBar";
 import { ViewOnlyNotice } from "./community/ViewOnlyNotice";
 import { TabConflictNotice } from "./TabConflictNotice";
-import { BlueprintSaveDialog } from "./BlueprintSaveDialog";
 import { PowerSourceOverlay } from "./PowerSourceOverlay";
 import { FactoryFlow } from "./flow/FactoryFlow";
 import { useBoardSoundEffects } from "./flow/use-board-sound-effects";
@@ -193,7 +192,12 @@ export function FactoryPlannerApp() {
 
   // The library follows the account: sign-in starts the sync, sign-out stops
   // it, and every change here reaches the other devices a few seconds later.
-  useEffect(() => startLibrarySync(), []);
+  // The session is read first: the sync starts only once a user is known, and
+  // the proxy guarantees there is one whenever this page renders.
+  useEffect(() => {
+    void useCommunityAuthStore.getState().hydrate().catch(() => undefined);
+    return startLibrarySync();
+  }, []);
 
   // Other browser tabs of the planner share this library: keep the open
   // design current with their saves (design-store.ts, canvasBase).
@@ -309,7 +313,6 @@ export function FactoryPlannerApp() {
       <PowerSourceOverlay />
       {/* Every pocket-to-shelf path (card save, share-a-pocket,
           overwrite) confirms through this one dialog. */}
-      <BlueprintSaveDialog />
     </div>
   );
 }

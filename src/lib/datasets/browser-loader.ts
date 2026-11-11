@@ -100,7 +100,7 @@ export async function initRecipeDatasetVersion(
 ): Promise<RecipeDataset> {
   const url = new URL(
     `/api/datasets/${encodeURIComponent(version.id)}/catalog`,
-    window.location.origin,
+    globalThis.location.origin,
   );
   addDatasetCacheKey(url, version);
   // The catalog is the one dataset response the SERVER adds to (icons for
@@ -129,7 +129,7 @@ export async function getRecipeDatasetRecipe(
 ): Promise<Recipe> {
   const url = new URL(
     `/api/datasets/${encodeURIComponent(version.id)}/recipes/${encodeURIComponent(recipeId)}`,
-    window.location.origin,
+    globalThis.location.origin,
   );
   addDatasetCacheKey(url, version);
   const key = url.toString();
@@ -164,7 +164,7 @@ export async function getRecipeDatasetRecipeIds(
 ): Promise<string[]> {
   const url = new URL(
     `/api/datasets/${encodeURIComponent(version.id)}/recipe-ids`,
-    window.location.origin,
+    globalThis.location.origin,
   );
   addDatasetCacheKey(url, version);
   const result = await fetchJson<{ recipeIds: string[] }>(url.toString());
@@ -178,7 +178,7 @@ export async function resolveRecipeDatasetRecipes(
 ): Promise<RecipeDatasetResolveResult> {
   const url = new URL(
     `/api/datasets/${encodeURIComponent(version.id)}/resolve-recipes`,
-    window.location.origin,
+    globalThis.location.origin,
   );
   addDatasetCacheKey(url, version);
   return fetchJson<RecipeDatasetResolveResult>(url.toString(), {
@@ -195,7 +195,7 @@ export async function queryRecipeDatasetRecipes(
 ): Promise<RecipeDatasetQueryResult> {
   const url = new URL(
     `/api/datasets/${encodeURIComponent(version.id)}/recipes`,
-    window.location.origin,
+    globalThis.location.origin,
   );
   url.searchParams.set("query", query.query);
   url.searchParams.set("mode", query.mode);
@@ -239,7 +239,7 @@ export async function listRecipeDatasetCrops(
 ): Promise<{ crops: RecipeSummary[] }> {
   const url = new URL(
     `/api/datasets/${encodeURIComponent(version.id)}/crops`,
-    window.location.origin,
+    globalThis.location.origin,
   );
   addDatasetCacheKey(url, version);
   return fetchJson<{ crops: RecipeSummary[] }>(url.toString(), { signal: options.signal });
@@ -253,7 +253,7 @@ export async function listRecipeDatasetMobs(
 ): Promise<{ mobs: RecipeSummary[] }> {
   const url = new URL(
     `/api/datasets/${encodeURIComponent(version.id)}/mobs`,
-    window.location.origin,
+    globalThis.location.origin,
   );
   addDatasetCacheKey(url, version);
   return fetchJson<{ mobs: RecipeSummary[] }>(url.toString(), { signal: options.signal });
@@ -267,7 +267,7 @@ export async function queryRecipeDatasetResources(
 ): Promise<RecipeDatasetResourceQueryResult> {
   const url = new URL(
     `/api/datasets/${encodeURIComponent(version.id)}/resources`,
-    window.location.origin,
+    globalThis.location.origin,
   );
   url.searchParams.set("query", query.query);
   url.searchParams.set("offset", String(query.offset));

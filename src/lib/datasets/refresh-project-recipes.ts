@@ -23,7 +23,8 @@ export function recipesToRefresh(
   requested: WeakSet<Recipe>,
 ): Recipe[] {
   return recipes.filter((recipe) => {
-    if (requested.has(recipe)) {
+    // Power cards' recipes are synthesized locally; the dataset never has them.
+    if (requested.has(recipe) || isPowerRecipe(recipe)) {
       return false;
     }
     const key = `${versionId}|${recipe.id}`;

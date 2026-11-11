@@ -1,8 +1,10 @@
 # AGENTS.md
 
-GTNH Factory Flow: a production-chain planner for GregTech: New Horizons, live at
-https://gtnhplanner.com. Next.js App Router, TypeScript strict, Tailwind, React Flow,
-Zustand, Zod, Vitest. The repo is public.
+GTNH Planner: a private self-host fork of GTNH Factory Flow 3.11.1 (see README.md and
+deploy/SELFHOST.md). Next.js App Router, TypeScript strict, Tailwind, React Flow, Zustand,
+Zod, Vitest. Local SQLite accounts and plan history live in `src/lib/server/local/`; there
+is no Supabase and no community hub. The Releases and Production sections below describe
+upstream and do not apply here.
 
 This file is the always-loaded core. Each area keeps its own rules in a `CLAUDE.md`
 beside its code, which Claude Code loads when you open files there. Read the area file
@@ -40,8 +42,8 @@ Scratch harnesses are `*.local.test.ts` (excluded from the suite); run one with
 - `main` is the only working branch; never start another. Commit and push finished work
   unless told otherwise. Never reset or revert changes you did not make. Unmerged
   experiments survive as `archive/*` tags.
-- Push only to `origin` (`jackwrichards/gtnh-factory-flow`). `upstream` (Samiracle64, the
-  original fork, long diverged) and `kewaii` are not push targets.
+- This is a private self-host fork. Push only to `origin` (this fork). `jack` (jackwrichards,
+  the 4.x upstream) and `upstream` (Samiracle64) are read-only references, never push targets.
 - CI runs typecheck, the full suite and a Chromium/Firefox icon-sizing check on every PR
   and push to main. No tolerated failures. A test that pins player-facing copy changes in
   the same commit as the copy.

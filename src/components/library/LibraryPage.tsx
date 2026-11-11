@@ -1,6 +1,6 @@
 "use client";
 
-import { Bookmark, Factory, Folder, FolderPlus, LayoutGrid, Star } from "lucide-react";
+import { Folder, FolderPlus, LayoutGrid, Star } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -21,12 +21,10 @@ import type { DesignSummary } from "@/lib/designs/design-library";
 import { SETUPS_CHANGED_EVENT, notifySetupsChanged, requestShareDialog } from "@/lib/setups-tab";
 import { setLibraryView, useLibraryTab } from "@/lib/library/library-tab";
 import { playBoardSound } from "@/lib/board-sounds";
-import { useSavedSetups } from "@/lib/library/saved-setups";
 import { useDesignStore } from "@/store/design-store";
 import { LibraryDetail, previewUrlFor } from "./LibraryDetail";
 import { ArmedMenuItem, LibraryMenu, MenuHeading, MenuItem, MenuRule } from "./library-menu";
 import { Face, InlineName, LibraryTile } from "./LibraryTile";
-import { SetupsGrid } from "./SetupsGrid";
 import { SetupsFilterBar, useSetupFilters } from "./SetupsFilterBar";
 import { parsePlanSearch } from "@/lib/community/search-query";
 
@@ -96,7 +94,6 @@ export function LibraryPage() {
   /** The design whose preview page is up, if any. */
   const [detailId, setDetailId] = useState<string>();
   const { posts: myPosts, signedIn } = useMyPosts();
-  const savedIds = useSavedSetups();
 
   // The library has the search's voice for its pages: a page turned for
   // every view and every focus page. Arriving and leaving are silent,
@@ -419,8 +416,6 @@ export function LibraryPage() {
                 </option>
               ))}
               <option value="new">New collection…</option>
-              <option value="public">Public setups</option>
-              <option value="saved">Saved ({savedIds.length})</option>
             </select>
           </div>
           <aside className="flex w-[184px] shrink-0 flex-col gap-1 overflow-y-auto bg-[#101215] px-2 py-2 compact:hidden">
@@ -500,30 +495,11 @@ export function LibraryPage() {
               <span className="whitespace-nowrap text-[12px] font-bold">New collection</span>
             </button>
 
-            <div className="mx-1 my-2 border-t-2 border-[#23262d] compact:mx-2 compact:my-0 compact:h-4 compact:border-l compact:border-t-0" />
-            <RailItem
-              icon={Factory}
-              label="Public setups"
-              selected={library.view.kind === "public"}
-              onClick={() => setLibraryView({ kind: "public" })}
-            />
-            <RailItem
-              icon={Bookmark}
-              label="Saved"
-              nested
-              count={savedIds.length}
-              selected={library.view.kind === "saved"}
-              onClick={() => setLibraryView({ kind: "saved" })}
-            />
           </aside>
 
           {/* THE PAGE. */}
           <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-            {library.view.kind === "public" ? (
-              <SetupsGrid scope="network" presetQuery={library.view.search} />
-            ) : library.view.kind === "saved" ? (
-              <SetupsGrid scope="saved" />
-            ) : detailDesign ? (
+            {detailDesign ? (
               <LibraryDetail
                 entry={{
                   name: detailDesign.name,
@@ -1044,6 +1020,8 @@ function sortDesignsBy(designs: DesignSummary[], sort: SortKey): DesignSummary[]
  * still loading. Read once per sign-in and again whenever a share lands or
  * a post is changed from here.
  */
+const HAS_COMMUNITY_HUB = false as boolean;
+
 function useMyPosts(): { posts: Map<string, CommunityPlanSummary> | undefined; signedIn: boolean } {
   const { user } = useCommunityUser();
   const username = user?.username;
@@ -1060,7 +1038,8 @@ function useMyPosts(): { posts: Map<string, CommunityPlanSummary> | undefined; s
   }, []);
 
   useEffect(() => {
-    if (!username) {
+    // The community hub does not exist on this instance: there are no posts to look up.
+    if (!username || !HAS_COMMUNITY_HUB) {
       return;
     }
     let cancelled = false;
@@ -1093,7 +1072,7 @@ function useMyPosts(): { posts: Map<string, CommunityPlanSummary> | undefined; s
 
   return {
     posts: loaded && loaded.username === username ? loaded.posts : undefined,
-    signedIn: Boolean(username),
+    signedIn: HAS_COMMUNITY_HUB && Boolean(username),
   };
 }
 

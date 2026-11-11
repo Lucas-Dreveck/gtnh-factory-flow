@@ -11,3 +11,9 @@ coverage
 .env*
 dev-server*.log
 public/datasets/gtnh
+var
+scratch
+src/scratch
+.worktrees
+*.local.*
+!vitest.local.config.ts

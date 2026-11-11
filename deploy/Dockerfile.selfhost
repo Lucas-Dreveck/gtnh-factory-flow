@@ -1,0 +1,29 @@
+# Builds the self-hosted planner on Linux (so the bundle never carries
+# Windows binaries). Targets:
+#   bundle  -> just the files to upload to a Pelican Node.js server
+#   runtime -> a runnable image (docker run / compose), if you prefer that
+FROM node:24-bookworm-slim AS build
+WORKDIR /app
+ENV NEXT_TELEMETRY_DISABLED=1
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY . .
+RUN npm run build \
+ && mkdir -p /out \
+ && cp -r .next/standalone/. /out/ \
+ && mkdir -p /out/.next && cp -r .next/static /out/.next/static \
+ && cp -r public /out/public
+
+FROM scratch AS bundle
+COPY --from=build /out /
+
+FROM node:24-bookworm-slim AS runtime
+ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 HOSTNAME=0.0.0.0 PORT=3000 GTNH_DATA_DIR=/data
+WORKDIR /app
+RUN useradd --system --uid 10001 planner && mkdir -p /data && chown planner /data
+COPY --from=build --chown=root:root /out /app
+USER planner
+EXPOSE 3000
+VOLUME ["/data"]
+# Datasets are mounted read-only at /app/public/datasets/gtnh
+CMD ["node", "--disable-warning=ExperimentalWarning", "server.js"]

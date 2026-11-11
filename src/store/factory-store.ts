@@ -1,5 +1,15 @@
 "use client";
 
+import {
+  addRouteOption,
+  createRouteChoice,
+  deleteRouteChoice,
+  otherOptionCards,
+  pruneRouteChoices,
+  removeRouteOption,
+  setRouteActive,
+  splitBoardIds,
+} from "@/lib/model/route-choices";
 import { isInputRate, type TargetMode } from "@/lib/model/storage-target";
 
 import { dissolveProductionGroup, productionGroupDescendants } from "@/lib/model/production-groups";
@@ -44,6 +54,9 @@ import { registerBooksSink, solveBooks, solveBooksNow } from "./solve-books";
 import { applyEdgeInputOverride } from "@/lib/model/edge-input-overrides";
 import { applyRecipeInputOverrides, inputOverrideAmount } from "@/lib/model/recipe-input-overrides";
 import type { AlternativeCycleFace } from "@/lib/nei/alternative-cycle";
+import { insertRouteDraft } from "@/lib/routes/insert-draft";
+import type { RouteOptionDraft } from "@/lib/routes/types";
+import { createRecipeNode } from "@/lib/model/recipe-node";
 import { createCropFarmPlaceholderRecipe, isCropFarmRecipe } from "@/lib/model/passive-production";
 import { buildPowerRecipe, isPowerRecipe } from "@/lib/power/power-recipe";
 import { POWER_EU_CLAUSE_ID } from "@/lib/power/power-search";
@@ -596,6 +609,28 @@ interface FactoryStore {
    * go with them, exactly as the one-at-a-time deletes do.
    */
   deleteBoardSelection: (selection: { nodeIds?: string[]; edgeIds?: string[] }) => void;
+  /**
+   * Route alternatives (`FactoryProject.routeChoices`). Each is one undo step.
+   * `createRouteChoice` makes the board ids option A; `addRouteOption` adds
+   * them to an existing choice. Both return the choice id (undefined: nothing
+   * to add). `keepOnlyRouteOption` deletes the other options' cards.
+   */
+  createRouteChoice: (name: string, boardIds: string[]) => string | undefined;
+  addRouteOption: (choiceId: string, boardIds: string[]) => boolean;
+  /**
+   * A route found by the discovery search, laid beside the current one as an
+   * alternative: the draft's cards join the board, the replaced cards become
+   * option A, the draft option B, and `active` stays on A. One undo step.
+   * `choiceId` extends an existing choice. Returns undefined when nothing was added.
+   */
+  addDiscoveredRoute: (
+    draft: RouteOptionDraft,
+    options: { name: string; choiceId?: string; currentLabel?: string },
+  ) => { choiceId: string; optionId: string } | undefined;
+  setRouteActive: (choiceId: string, active: string) => void;
+  removeRouteOption: (choiceId: string, optionId: string) => void;
+  deleteRouteChoice: (choiceId: string) => void;
+  keepOnlyRouteOption: (choiceId: string, optionId: string) => void;
   /**
    * Paste a copied selection: fresh ids, wires remapped onto the copies,
    * per-node recipes cloned, everything offset and snapped to the grid - one
@@ -3326,6 +3361,115 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
       });
     });
   },
+  createRouteChoice: (name, boardIds) => {
+    const state = get();
+    const selection = splitBoardIds(state.project, boardIds);
+    if (state.isReadOnly || selection.nodeIds.length + selection.storageIds.length === 0) {
+      return undefined;
+    }
+    const choiceId = createId("route-choice");
+    set((current) => {
+      const project = touchProject(
+        createRouteChoice(current.project, name, selection, {
+          choice: choiceId,
+          a: createId("route-option"),
+          b: createId("route-option"),
+        }),
+      );
+      return withProjectHistory(current, { project, lastResult: solveBooks(project) });
+    });
+    return choiceId;
+  },
+  addRouteOption: (choiceId, boardIds) => {
+    const state = get();
+    const selection = splitBoardIds(state.project, boardIds);
+    const next = addRouteOption(state.project, choiceId, selection, createId("route-option"));
+    if (state.isReadOnly || next === state.project) {
+      return false;
+    }
+    set((current) => {
+      const project = touchProject(addRouteOption(current.project, choiceId, selection, createId("route-option")));
+      return withProjectHistory(current, { project, lastResult: solveBooks(project) });
+    });
+    return true;
+  },
+  addDiscoveredRoute: (draft, options) => {
+    const state = get();
+    if (state.isReadOnly) return undefined;
+    const inserted = insertRouteDraft(state.project, draft, options, {
+      choice: createId("route-choice"),
+      a: createId("route-option"),
+      b: createId("route-option"),
+      option: createId("route-option"),
+      fresh: createId,
+    });
+    if (!inserted) return undefined;
+    const project = touchProject(inserted.project);
+    set((current) => withProjectHistory(current, { project, lastResult: solveBooks(project) }));
+    return { choiceId: inserted.choiceId, optionId: inserted.optionId };
+  },
+  setRouteActive: (choiceId, active) => {
+    set((state) => {
+      const next = setRouteActive(state.project, choiceId, active);
+      if (state.isReadOnly || next === state.project) {
+        return state;
+      }
+      const project = touchProject(next);
+      return withProjectHistory(state, { project, lastResult: solveBooks(project) });
+    });
+  },
+  removeRouteOption: (choiceId, optionId) => {
+    set((state) => {
+      const next = removeRouteOption(state.project, choiceId, optionId);
+      if (state.isReadOnly || next === state.project) {
+        return state;
+      }
+      const project = touchProject(next);
+      return withProjectHistory(state, { project, lastResult: solveBooks(project) });
+    });
+  },
+  deleteRouteChoice: (choiceId) => {
+    set((state) => {
+      const next = deleteRouteChoice(state.project, choiceId);
+      if (state.isReadOnly || next === state.project) {
+        return state;
+      }
+      const project = touchProject(next);
+      return withProjectHistory(state, { project, lastResult: solveBooks(project) });
+    });
+  },
+  keepOnlyRouteOption: (choiceId, optionId) => {
+    const state = get();
+    const choice = state.project.routeChoices?.find((c) => c.id === choiceId);
+    if (state.isReadOnly || !choice || !choice.options.some((o) => o.id === optionId)) {
+      return;
+    }
+    const doomed = otherOptionCards(choice, optionId);
+    if (doomed.nodeIds.length + doomed.storageIds.length === 0) {
+      // The others hold no cards: dropping the choice is the whole job.
+      get().deleteRouteChoice(choiceId);
+      return;
+    }
+    // One undo step: the choice leaves the project in the same pass that
+    // deletes the cards, so nothing is left pointing at them.
+    set((current) => {
+      const ids = new Set([...doomed.nodeIds, ...doomed.storageIds]);
+      const project = touchProject(
+        pruneOrphanStorages(
+          deleteRouteChoice(
+            {
+              ...current.project,
+              nodes: current.project.nodes.filter((n) => !ids.has(n.id)),
+              storages: (current.project.storages ?? []).filter((s) => !ids.has(s.id)),
+              edges: current.project.edges.filter((e) => !ids.has(e.source) && !ids.has(e.target)),
+            },
+            choiceId,
+          ),
+        ),
+      );
+      return withProjectHistory(current, { project, lastResult: solveBooks(project) });
+    });
+  },
   pasteBoardItems: (payload, offset) => {
     const pastedIds: string[] = [];
     set((state) => {
@@ -4728,30 +4872,17 @@ function addRecipeNodeToState(
       BOARD_GRID,
     ),
   );
-  // A machine picked in the recipe finder spawns the node with that handler
-  // selected, at the handler's own minimum tier.
-  const spawnHandler = options?.machineHandlerId
-    ? recipe.machineHandlers?.find((handler) => handler.id === options.machineHandlerId)
-    : undefined;
-  const node: FactoryNode = {
+  const node = createRecipeNode(recipe, {
     id: createId("node"),
-    recipeId: recipe.id,
-    cropFullFarmCount: isCropFarmRecipe(recipe) ? 1 : undefined,
-    machineCount: 1,
-    parallel: 1,
-    machineHandlerId: spawnHandler?.id,
+    position,
+    machineHandlerId: options?.machineHandlerId,
     machineConfigTiers: options?.machineConfigTiers,
-    overclockTier: spawnHandler?.minimumTier ?? recipe.minimumTier,
     recipeInputOverrides: mergeRecipeInputOverrides(
       resource ? buildRecipeInputOverrides(recipe, resource) : undefined,
       buildRecipeInputPickOverrides(recipe, options?.inputPicks),
     ),
-    // A crop picked out of the recipe book is the same card the Sprout button
-    // drops, so it spawns green like that one rather than as a grey machine.
-    colorTag: options?.colorTag ?? (isCropFarmRecipe(recipe) ? "green" : undefined),
-    enabled: true,
-    position,
-  };
+    colorTag: options?.colorTag,
+  });
   const recipeAlreadyInProject = state.project.recipes.some((entry) => entry.id === recipe.id);
   const project = touchProject({
     ...state.project,
@@ -4800,9 +4931,6 @@ function addConnectedRecipeNodeToState(
     return addRecipeNodeToState(state, recipe, resource, { ...options, focusCamera: true });
   }
 
-  const spawnHandler = options?.machineHandlerId
-    ? recipe.machineHandlers?.find((handler) => handler.id === options.machineHandlerId)
-    : undefined;
   // "recipes" asked who MAKES the clicked thing, so the new card feeds the
   // anchor and stands upstream of it; "uses" is the mirror.
   const feedsAnchor = resource.mode === "recipes";
@@ -4831,20 +4959,15 @@ function addConnectedRecipeNodeToState(
 
   const recipeAlreadyInProject = state.project.recipes.some((entry) => entry.id === recipe.id);
   const nextNode: FactoryNode = {
-    id: createId("node"),
-    recipeId: recipe.id,
-    cropFullFarmCount: isCropFarmRecipe(recipe) ? 1 : undefined,
-    machineCount: 1,
-    parallel: 1,
-    machineHandlerId: spawnHandler?.id,
-    overclockTier: spawnHandler?.minimumTier ?? recipe.minimumTier,
-    recipeInputOverrides: mergeRecipeInputOverrides(
-      buildRecipeInputOverrides(recipe, resource),
-      buildRecipeInputPickOverrides(recipe, options?.inputPicks),
-    ),
-    colorTag: isCropFarmRecipe(recipe) ? "green" : undefined,
-    enabled: true,
-    position,
+    ...createRecipeNode(recipe, {
+      id: createId("node"),
+      position,
+      machineHandlerId: options?.machineHandlerId,
+      recipeInputOverrides: mergeRecipeInputOverrides(
+        buildRecipeInputOverrides(recipe, resource),
+        buildRecipeInputPickOverrides(recipe, options?.inputPicks),
+      ),
+    }),
     // Spawned beside its anchor, in the anchor's own coordinates - so it
     // joins the anchor's board and the relative placement stays true.
     pocketId: anchorFrame ? anchorNode.pocketId : undefined,
@@ -6132,7 +6255,7 @@ function touchProject(project: FactoryProject): FactoryProject {
     // a custom rate card never keeps a resource after its last wire goes —
     // whether the wire, the machine at the far end or a whole selection was
     // what got deleted.
-    ...normalizeProjectHatchInputs(normalizeFullFarms(releaseCustomRates(project))),
+    ...pruneRouteChoices(normalizeProjectHatchInputs(normalizeFullFarms(releaseCustomRates(project)))),
     metadata: {
       ...project.metadata,
       updatedAt: new Date().toISOString(),

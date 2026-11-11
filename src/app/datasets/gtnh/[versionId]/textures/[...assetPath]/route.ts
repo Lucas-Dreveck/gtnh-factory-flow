@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const datasetRoot = path.join(process.cwd(), "public", "datasets", "gtnh");
+const datasetRoot = path.join(/*turbopackIgnore: true*/ process.cwd(), "public", "datasets", "gtnh");
 const textureRoots = new Set(["rendered", "icons", "atlas", "nei-layouts"]);
 
 export async function GET(

@@ -1,21 +1,13 @@
 "use client";
 
 import {
-  Download,
-  Factory,
   Library,
   Plus,
   Search,
-  ThumbsUp,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { FLUID_ICON_SCALE, ResourceIcon } from "@/components/nei/ResourceIcon";
 import { DEFAULT_DATASET_MANIFEST_URL } from "@/lib/datasets";
 import { queryRecipeDatasetResources } from "@/lib/datasets/browser-loader";
-import { listCommunityPlans } from "@/lib/community/client";
-import type { CommunityPlanSummary } from "@/lib/community/types";
-import type { EntryIcon } from "@/lib/model/types";
-import { openCommunityPost } from "@/lib/community/open-post";
 import { openLibrary } from "@/lib/library/library-tab";
 import { openSidebarTab } from "@/lib/sidebar-tab";
 import { APP_VERSION } from "@/lib/version";
@@ -34,7 +26,6 @@ import { WelcomeBackdrop } from "./WelcomeBackdrop";
  * version chip, not here.
  */
 
-const COMMUNITY_TILE_COUNT = 15;
 /** How many of the pack's most-used items the backdrop gets to drift. */
 const BACKDROP_ICON_COUNT = 60;
 
@@ -124,12 +115,6 @@ export function WelcomePage() {
                 New design
               </PrimaryButton>
               <SecondaryButton
-                icon={Factory}
-                onClick={() => openLibrary({ kind: "public" })}
-              >
-                Browse shared setups
-              </SecondaryButton>
-              <SecondaryButton
                 icon={Search}
                 onClick={() => {
                   writeWorkspaceView({ leftPanelOpen: true });
@@ -144,8 +129,6 @@ export function WelcomePage() {
               </SecondaryButton>
             </div>
           </header>
-
-          <CommunityShelf />
 
           <footer className="border-t border-line pt-3">
             <label className="flex w-fit cursor-pointer items-center gap-2 text-[12px] text-fg-muted hover:text-fg">
@@ -165,14 +148,6 @@ export function WelcomePage() {
 }
 
 /* ------------------------------------------------------------------ */
-
-function SectionTitle({ children }: { children: ReactNode }) {
-  return (
-    <h2 className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.14em] text-[#aebccd]">
-      {children}
-    </h2>
-  );
-}
 
 function PrimaryButton({
   icon: Icon,
@@ -213,130 +188,5 @@ function SecondaryButton({
       <Icon className="h-4 w-4" aria-hidden />
       {children}
     </button>
-  );
-}
-
-/** A saved face, drawn oversized so the art fills the box the way tabs do. */
-function Face({ icon, size }: { icon: EntryIcon | undefined; size: number }) {
-  const drawable = Boolean(icon && (icon.iconPath || icon.iconAtlas || icon.kind === "fluid"));
-  return (
-    <span
-      aria-hidden
-      className="flex shrink-0 items-center justify-center overflow-hidden"
-      style={{ width: size, height: size }}
-    >
-      {drawable && icon ? (
-        <ResourceIcon
-          resource={{
-            id: icon.resourceId,
-            kind: icon.kind,
-            amount: 1,
-            displayName: icon.displayName,
-            iconPath: icon.iconPath,
-            iconAtlas: icon.iconAtlas,
-            dominantColor: icon.dominantColor,
-          }}
-          bare
-          tooltip={false}
-          showAmount={false}
-          iconPixelSize={
-            icon.kind === "fluid" ? Math.round((size - 8) / FLUID_ICON_SCALE) : (size - 8) * 2
-          }
-          className="!h-full !w-full"
-        />
-      ) : (
-        <Factory className="h-1/2 w-1/2 text-[#3d4a58]" />
-      )}
-    </span>
-  );
-}
-
-/** The community's newest setups, opening in a tab of their own. */
-function CommunityShelf() {
-  const [plans, setPlans] = useState<CommunityPlanSummary[] | undefined>(undefined);
-  const [error, setError] = useState<string | undefined>(undefined);
-  const [busyId, setBusyId] = useState<string | undefined>(undefined);
-
-  useEffect(() => {
-    let cancelled = false;
-    listCommunityPlans({ sort: "new", pageSize: COMMUNITY_TILE_COUNT })
-      .then((response) => {
-        if (!cancelled) {
-          setPlans(response.plans.slice(0, COMMUNITY_TILE_COUNT));
-        }
-      })
-      .catch((listError: unknown) => {
-        if (!cancelled) {
-          setError(listError instanceof Error ? listError.message : "Could not reach the shelf.");
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const open = async (plan: CommunityPlanSummary) => {
-    setBusyId(plan.id);
-    try {
-      await openCommunityPost({ id: plan.id, name: plan.name, isMine: plan.isMine === true, authorName: plan.authorName });
-    } catch (openError) {
-      setError(openError instanceof Error ? openError.message : "Opening the setup failed.");
-    } finally {
-      setBusyId(undefined);
-    }
-  };
-
-  return (
-    <section className="flex flex-col gap-2">
-      <SectionTitle>
-        <Factory className="h-3.5 w-3.5 text-cyan-300" aria-hidden />
-        New from the community
-      </SectionTitle>
-      {error ? <p className="text-[12px] text-amber-300">{error}</p> : null}
-      <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
-        {(plans ?? Array.from({ length: COMMUNITY_TILE_COUNT }, () => undefined)).map(
-          (plan, index) =>
-            plan ? (
-              <button
-                key={plan.id}
-                type="button"
-                disabled={busyId !== undefined}
-                onClick={() => void open(plan)}
-                className={[
-                  "group flex items-center gap-2 border border-line bg-[#151a21]/80 px-2 py-1 text-left hover:border-cyan-500/60 hover:bg-[#182029] disabled:opacity-60",
-                  busyId === plan.id ? "animate-pulse" : "",
-                ].join(" ")}
-              >
-                <Face icon={plan.icon} size={44} />
-                <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="truncate text-[12px] font-bold text-fg group-hover:text-white">
-                    {plan.name}
-                  </span>
-                  <span className="flex items-center gap-2 truncate text-[11px] text-fg-muted">
-                    <span className="truncate">
-                      {plan.authorName ? plan.authorName : "anonymous"}
-                      {plan.highestTier ? ` · ${plan.highestTier}` : ""}
-                    </span>
-                    <span className="inline-flex shrink-0 items-center gap-0.5">
-                      <ThumbsUp className="h-3 w-3" aria-hidden />
-                      {plan.score}
-                    </span>
-                    <span className="inline-flex shrink-0 items-center gap-0.5">
-                      <Download className="h-3 w-3" aria-hidden />
-                      {plan.downloads}
-                    </span>
-                  </span>
-                </span>
-              </button>
-            ) : (
-              <div
-                key={index}
-                aria-hidden
-                className="h-[54px] animate-pulse border border-line bg-[#151a21]/60"
-              />
-            ),
-        )}
-      </div>
-    </section>
   );
 }

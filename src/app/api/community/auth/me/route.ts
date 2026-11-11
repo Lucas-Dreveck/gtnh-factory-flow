@@ -1,17 +1,14 @@
-import { NextResponse } from "next/server";
-import { getSessionUser, isCommunityConfigured } from "@/lib/server/community";
+import { getSessionUser } from "@/lib/server/local/auth";
+import { json, serverError } from "@/lib/server/local/http";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  if (!isCommunityConfigured()) {
-    return NextResponse.json({ user: null });
+  try {
+    const user = getSessionUser(request);
+    return json({ user: user ? { username: user.username, isAdmin: user.isAdmin } : null });
+  } catch (error) {
+    return serverError("auth/me", error);
   }
-
-  const user = await getSessionUser(request);
-  return NextResponse.json(
-    { user: user ? { username: user.username, isAdmin: user.is_admin } : null },
-    { headers: { "Cache-Control": "no-store" } },
-  );
 }

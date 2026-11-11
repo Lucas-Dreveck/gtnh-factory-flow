@@ -29,6 +29,7 @@ export function AuthForm({ onSignedIn }: { onSignedIn: (user: CommunityUser) => 
   const [mode, setMode] = useState<"login" | "register">("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [invite, setInvite] = useState("");
   const [error, setError] = useState<string>();
   const [isBusy, setBusy] = useState(false);
 
@@ -39,7 +40,7 @@ export function AuthForm({ onSignedIn }: { onSignedIn: (user: CommunityUser) => 
       const user =
         mode === "login"
           ? await loginCommunityUser(username, password)
-          : await registerCommunityUser(username, password);
+          : await registerCommunityUser(username, password, invite);
       onSignedIn(user);
     } catch (authError) {
       setError(authError instanceof Error ? authError.message : "Sign in failed.");
@@ -76,6 +77,17 @@ export function AuthForm({ onSignedIn }: { onSignedIn: (user: CommunityUser) => 
           Create account
         </label>
       </div>
+      {mode === "register" ? (
+        <input
+          value={invite}
+          onChange={(event) => setInvite(event.target.value)}
+          placeholder="Invite code"
+          aria-label="Invite code"
+          autoComplete="off"
+          maxLength={64}
+          className="w-full rounded border border-line-strong bg-surface-sunken px-2 py-1.5 text-sm"
+        />
+      ) : null}
       <input
         value={username}
         onChange={(event) => setUsername(event.target.value)}
@@ -90,13 +102,21 @@ export function AuthForm({ onSignedIn }: { onSignedIn: (user: CommunityUser) => 
         onChange={(event) => setPassword(event.target.value)}
         placeholder="Password"
         autoComplete={mode === "login" ? "current-password" : "new-password"}
-        maxLength={128}
+        maxLength={256}
         className="w-full rounded border border-line-strong bg-surface-sunken px-2 py-1.5 text-sm"
       />
+      {mode === "register" ? (
+        <p className="text-xs text-fg-muted">At least 10 characters. Ask the admin for an invite code.</p>
+      ) : null}
       {error ? <p className="text-sm text-red-500">{error}</p> : null}
       <button
         type="submit"
-        disabled={isBusy || username.trim().length < 3 || password.length < 6}
+        disabled={
+          isBusy ||
+          username.trim().length < 3 ||
+          password.length < (mode === "register" ? 10 : 1) ||
+          (mode === "register" && invite.trim().length === 0)
+        }
         className="inline-flex items-center gap-2 rounded border border-cyan-700 bg-cyan-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {isBusy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}

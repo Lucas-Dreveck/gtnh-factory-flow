@@ -10,6 +10,7 @@ import type { DatasetResourceIndexEntry } from "@/lib/datasets/types";
 import type { ResourceAmount } from "@/lib/model/types";
 import { getUiScale } from "@/lib/ui-scale";
 import { useFactoryStore } from "@/store/factory-store";
+import { useRouteUi } from "@/components/routes/route-ui-store";
 
 /**
  * THE BOARD'S ONE RIGHT-CLICK MENU. Right click the void, a card, a drawer
@@ -121,14 +122,46 @@ export function BoardContextMenu({
     onClose();
   };
 
+  // A card or drawer inside the live selection stands for the whole selection.
+  const makeRoute = () => {
+    const selected = store().selectedBoardIds;
+    const ids = target.kind !== "pane" && target.kind !== "edge" ? (selected.includes(target.id) ? selected : [target.id]) : [];
+    useRouteUi.getState().askNewOption(ids);
+  };
+
+  // "Find other routes for X": one entry per distinct thing the card makes.
+  const findable: Array<{ kind: "item" | "fluid"; id: string; name: string }> = [];
+  if (target.kind === "node" || target.kind === "storage") {
+    const project = store().project;
+    if (target.kind === "node") {
+      const node = project.nodes.find((entry) => entry.id === target.id);
+      const recipe = project.recipes.find((entry) => entry.id === node?.recipeId);
+      for (const output of recipe && !recipe.power ? recipe.outputs : []) {
+        if (output.kind !== "item" && output.kind !== "fluid") continue;
+        if (!findable.some((entry) => entry.kind === output.kind && entry.id === output.id) && findable.length < 6) {
+          findable.push({ kind: output.kind, id: output.id, name: output.displayName ?? output.id });
+        }
+      }
+    } else {
+      const storage = project.storages?.find((entry) => entry.id === target.id);
+      if (storage && (storage.kind === "item" || storage.kind === "fluid")) findable.push({ kind: storage.kind, id: storage.resourceId, name: storage.displayName ?? storage.resourceId });
+    }
+  }
+  const findRoutes = (entry: { kind: "item" | "fluid"; id: string }) => () =>
+    useRouteUi.getState().openFinder({ kind: entry.kind, id: entry.id }, target.kind === "node" ? target.id : undefined);
+
   return (
-    <LibraryMenu left={target.x} top={target.y} label="Board menu" onClose={onClose}>
+    <LibraryMenu left={target.x} top={target.y} label="Board menu" onClose={onClose} width={findable.length > 0 ? 320 : undefined}>
       {target.kind === "pane" ? (
         <MenuItem label="New product drawer" onClick={() => setPicking(true)} />
       ) : null}
       {target.kind === "node" ? (
         <>
           <MenuItem label="Clone" onClick={run(() => store().duplicateNode(target.id))} />
+          <MenuItem label="Make route alternative..." onClick={run(makeRoute)} />
+          {findable.map((entry) => (
+            <MenuItem key={`${entry.kind}:${entry.id}`} label={`Find other routes for ${entry.name}`} onClick={run(findRoutes(entry))} />
+          ))}
           <MenuRule />
           <MenuItem label="Delete" tone="danger" onClick={run(() => store().deleteNode(target.id))} />
         </>
@@ -136,6 +169,10 @@ export function BoardContextMenu({
       {target.kind === "storage" ? (
         <>
           <MenuItem label="Clone" onClick={run(() => store().duplicateStorage(target.id))} />
+          <MenuItem label="Make route alternative..." onClick={run(makeRoute)} />
+          {findable.map((entry) => (
+            <MenuItem key={`${entry.kind}:${entry.id}`} label={`Find other routes for ${entry.name}`} onClick={run(findRoutes(entry))} />
+          ))}
           <MenuRule />
           <MenuItem label="Delete" tone="danger" onClick={run(() => store().deleteStorage(target.id))} />
         </>

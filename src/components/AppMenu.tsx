@@ -12,8 +12,6 @@ import { MenuLinks } from "./HeaderLinks";
 
 interface AppMenuProps {
   onLoadDatasetVersion: (versionId: string) => void;
-  /** Opens the share dialog, which the header owns; see AppHeader. */
-  onShare: () => void;
   /** Opens the export-image dialog, also owned by the header. */
   onExportImage: () => void;
   /** Opens the settings dialog, also owned by the header. */
@@ -28,7 +26,6 @@ interface AppMenuProps {
  */
 export function AppMenu({
   onLoadDatasetVersion,
-  onShare,
   onExportImage,
   onOpenSettings,
 }: AppMenuProps) {
@@ -70,7 +67,6 @@ export function AppMenu({
             <BoardActions
               variant="list"
               onAction={() => setOpen(false)}
-              onShare={onShare}
               onExportImage={onExportImage}
             />
           </MenuSection>

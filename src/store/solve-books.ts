@@ -1,4 +1,5 @@
 import { calculateThroughput } from "@/lib/solver";
+import { applyRouteChoices } from "@/lib/model/route-choices";
 import type { FactoryProject, ThroughputResult } from "@/lib/model/types";
 
 /**
@@ -138,7 +139,9 @@ export function solveBooks(project: FactoryProject): ThroughputResult {
   return solveBooksUngated(project);
 }
 
-function solveBooksUngated(project: FactoryProject): ThroughputResult {
+function solveBooksUngated(stored: FactoryProject): ThroughputResult {
+  // Route alternatives: the solver sees only the active options.
+  const project = applyRouteChoices(stored);
   const size = project.nodes.length + project.edges.length;
   const provenSlow =
     lastSolveDurationMs !== undefined &&

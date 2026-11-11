@@ -1,0 +1,34 @@
+# Private self-hosted GTNH Planner. See deploy/SELFHOST.md.
+# 1) node tools/mirror-dataset.mjs     (fills public/datasets/gtnh, ~105 MB)
+# 2) docker compose up -d --build
+# 3) docker compose logs planner      (one-time ADMIN invite code) -> open /login
+services:
+  planner:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.selfhost
+      target: runtime
+    restart: unless-stopped
+    # Bound to localhost on purpose: put Tailscale (tailscale serve) or your own
+    # TLS reverse proxy in front. Do not publish this port to the internet.
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      GTNH_COOKIE_SECURE: "1"          # 1 behind HTTPS (tailscale serve / reverse proxy); 0 for plain http
+      GTNH_ALLOWED_HOSTS: ""           # e.g. planner.tailnet-name.ts.net
+      GTNH_TRUST_PROXY: "0"            # 1 only behind a proxy you control that sets X-Forwarded-For
+      GTNH_BACKUP_HOURS: "24"
+      GTNH_BACKUP_KEEP: "14"
+      NODE_OPTIONS: "--max-old-space-size=2048"
+    volumes:
+      - planner-data:/data                                         # accounts, plans, history, backups
+      - ./public/datasets/gtnh:/app/public/datasets/gtnh:ro       # recipe dataset
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777
+      - /app/.next/cache:mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+volumes:
+  planner-data:

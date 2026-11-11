@@ -3,7 +3,7 @@ import { stat } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
 
-export const datasetRoot = path.join(process.cwd(), "public", "datasets", "gtnh");
+export const datasetRoot = path.join(/*turbopackIgnore: true*/ process.cwd(), "public", "datasets", "gtnh");
 
 export async function serveDatasetFile(
   filePath: string,

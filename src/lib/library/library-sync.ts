@@ -394,23 +394,34 @@ async function applyFolderAction(action: FolderAction, local: DesignFolder[]): P
   }
 }
 
+/**
+ * Writes a plan the account holds over the local record and, when that design
+ * is open, reloads the canvas. The record adopts the account's stamps, so the
+ * plan reads as synced and no stale autosave is pushed over it. Used by pulls
+ * and by a history restore.
+ */
+export async function adoptRemotePlan(design: RemoteDesignMeta, plan: unknown): Promise<void> {
+  const store = useDesignStore.getState();
+  const project = parseFactoryProjectJson(JSON.stringify(plan));
+  const existing = await readDesign(design.id);
+  await writeDesign({
+    ...existing,
+    ...remoteMetaToSummary(design),
+    project: { ...project, name: design.name },
+  });
+  if (design.id === store.activeDesignId) {
+    await store.reloadActiveDesign();
+    setStatus({ reloadedActiveAt: new Date().toISOString() });
+  }
+}
+
 /** Resolves to whether the local library changed. */
 async function applyDesignAction(action: DesignAction): Promise<boolean> {
   const store = useDesignStore.getState();
   switch (action.kind) {
     case "pull-plan": {
       const { design, plan } = await fetchRemoteDesignPlan(action.id);
-      const project = parseFactoryProjectJson(JSON.stringify(plan));
-      const existing = await readDesign(action.id);
-      await writeDesign({
-        ...existing,
-        ...remoteMetaToSummary(design),
-        project: { ...project, name: design.name },
-      });
-      if (action.id === store.activeDesignId) {
-        await store.reloadActiveDesign();
-        setStatus({ reloadedActiveAt: new Date().toISOString() });
-      }
+      await adoptRemotePlan(design, plan);
       if (design.closed && action.id === store.activeDesignId) {
         await store.closeDesign(action.id);
       }

@@ -1,5 +1,7 @@
 "use client";
 
+import "./route-alternatives.css";
+import { inactiveRouteMarks } from "@/lib/model/route-choices";
 import { ChecklistKeys, useChecklistBoard, checklistCursorStyle } from "./ChecklistMode";
 
 import { emitBoardCameraMove } from "@/lib/board-camera-signal";
@@ -142,7 +144,8 @@ import {
   type BoardFraming,
 } from "@/store/factory-store";
 import { getAutoSolve, setAutoSolve, subscribeAutoSolve } from "@/store/solve-books";
-import { hasAnySolveNumbers } from "@/lib/solver/throughput";
+import { calculateThroughput, hasAnySolveNumbers } from "@/lib/solver/throughput";
+import { diagnoseSolve, type SolveDiagnostic } from "@/lib/solver/solve-diagnostics";
 import { getStorageRoles } from "@/lib/model/storage-role";
 import { useBlueprintStore } from "@/store/blueprint-store";
 import {
@@ -1869,6 +1872,9 @@ interface ResolvedResourceHandle {
   kind: ResourceKind;
   resourceId: string;
 }
+
+/** Ids and badge text go into a style rule: drop anything that could close the string. */
+const cssSafe = (text: string) => text.replace(/[^\w .:()-]/g, "");
 
 export function FactoryFlow() {
   const isReadOnly = useFactoryStore((state) => state.isReadOnly);
@@ -6111,6 +6117,24 @@ export function FactoryFlow() {
     return visibleFlowNodes.map((node) => ({ ...node, draggable: false,
       className: [node.className, checked.has(node.id) ? "checklist-done" : ""].filter(Boolean).join(" ") }));
   }, [visibleFlowNodes, checklistMode, project.checklist, isReadOnly]);
+  // Route alternatives: cards and drawers of a non-active option are dimmed and
+  // wear an "Alt B (off)" badge (a style rule per id; the card never re-renders).
+  const routeMarks = useMemo(() => inactiveRouteMarks(project.routeChoices), [project.routeChoices]);
+  const routedNodes = useMemo(() => {
+    if (routeMarks.size === 0) return checklistNodes;
+    return checklistNodes.map((node) =>
+      routeMarks.has(node.id)
+        ? { ...node, className: [node.className, "route-off"].filter(Boolean).join(" ") }
+        : node,
+    );
+  }, [checklistNodes, routeMarks]);
+  const routeBadgeCss = useMemo(
+    () =>
+      [...routeMarks]
+        .map(([id, tag]) => `.react-flow__node[data-id="${cssSafe(id)}"]::after{content:"${cssSafe(tag)}"}`)
+        .join(" "),
+    [routeMarks],
+  );
   const checklistEdges = useMemo(() => {
     if (!checklistMode) return visibleFlowEdges;
     const checked = new Set(project.checklist?.edges);
@@ -6238,8 +6262,9 @@ export function FactoryFlow() {
     >
       {boardMenu && !isReadOnly ? <BoardContextMenu target={boardMenu} onClose={closeBoardMenu} /> : null}
       <StorageRatioEditor />
+      {routeBadgeCss ? <style>{routeBadgeCss}</style> : null}
       <ReactFlow
-        nodes={checklistNodes}
+        nodes={routedNodes}
         edges={checklistEdges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
@@ -6467,6 +6492,7 @@ export function FactoryFlow() {
         <DeathSpiralNotice onShow={handleShowNodes} />
         <ClogLockNotice onShow={handleShowNodes} />
         <SolveModeNotice onShow={handleShowNodes} />
+        <SolveDiagnosticsPanel onShow={handleShowNodes} />
         <RecipeAddChips />
       </div>
       {isProjectImporting ? <FlowLoadingOverlay /> : null}
@@ -7070,6 +7096,91 @@ const missingProductIds = (project: FactoryProject): string[] => {
     .map((storage) => storage.id);
 };
 
+const DIAGNOSTIC_DOT: Record<SolveDiagnostic["severity"], string> = {
+  error: "bg-[#ff6b5e]",
+  warning: "bg-[#f2c14e]",
+  info: "bg-[#8fa3b8]",
+};
+
+/**
+ * "Why no result?" in Solve and Pool: each row says what is wrong and what to
+ * do, and clicking one frames the card or drawer it names. Hidden until the
+ * solve has an error or a warning to explain.
+ */
+const SolveDiagnosticsPanel = memo(function SolveDiagnosticsPanel({
+  onShow,
+}: {
+  onShow: (nodeIds: string[]) => void;
+}) {
+  const project = useFactoryStore((state) => state.project);
+  const lastResult = useFactoryStore((state) => state.lastResult);
+  const [open, setOpen] = useState(true);
+  // The pin-clash probe re-solves once per pin, so it runs deferred and
+  // debounced, only for failed pins, and never twice for the same books.
+  const [probed, setProbed] = useState<{ result: unknown; rows: SolveDiagnostic[] } | null>(null);
+  useEffect(() => {
+    if (!project.solveMode || !lastResult || lastResult.stale || lastResult.solveStatus?.pinsInfeasible !== true) {
+      return undefined;
+    }
+    if (project.nodes.filter((n) => n.enabled && (n.solvePin ?? 0) > 0).length > 10) return undefined;
+    const timer = setTimeout(() => {
+      setProbed({ result: lastResult, rows: diagnoseSolve(project, lastResult, { probe: calculateThroughput }) });
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [project, lastResult]);
+  const rows = useMemo(() => {
+    if (!project.solveMode || !lastResult || lastResult.stale) return [];
+    const base = probed && probed.result === lastResult ? probed.rows : diagnoseSolve(project, lastResult);
+    const all = base.filter(
+      // The needs-a-number banner already speaks for an empty goal.
+      (d) => !(d.code === "NO_GOAL" && d.severity === "error"),
+    );
+    return all.some((d) => d.severity !== "info") ? all : [];
+  }, [project, lastResult, probed]);
+  if (rows.length === 0) {
+    return null;
+  }
+  const poolMode = project.poolMode === true;
+  return (
+    <div className={`nodrag pointer-events-auto flex max-w-[min(calc(94*var(--ui-vw)),760px)] flex-col gap-1 border-2 px-2 py-1.5 font-mono text-[12px] ${poolMode
+      ? "border-[#6f9cff] bg-[#1a2233] text-[#d3dff4] shadow-[inset_2px_2px_0_#3e567d,inset_-2px_-2px_0_#101622,4px_4px_0_rgba(0,0,0,0.35)]"
+      : "border-[#9a6fd1] bg-[#241a2e] text-[#e0d3ec] shadow-[inset_2px_2px_0_#5a4380,inset_-2px_-2px_0_#150e1c,4px_4px_0_rgba(0,0,0,0.35)]"}`}>
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        className="flex items-center gap-2 text-left font-bold tracking-[0.5px]"
+        aria-expanded={open}
+      >
+        <span>WHY NO RESULT?</span>
+        <span className="font-normal opacity-70">{rows.length}</span>
+        <span className="ml-auto opacity-70">{open ? "Hide" : "Show"}</span>
+      </button>
+      {open ? (
+        <ul className="flex max-h-[28vh] flex-col gap-1 overflow-y-auto">
+          {rows.map((row, index) => {
+            const ids = [...(row.nodeIds ?? []), ...(row.storageIds ?? [])];
+            return (
+              <li key={`${row.code}:${index}`}>
+                <button
+                  type="button"
+                  disabled={ids.length === 0}
+                  onClick={() => onShow(ids)}
+                  className="flex w-full items-start gap-2 px-1 py-0.5 text-left enabled:hover:bg-white/10"
+                >
+                  <span className={`mt-[5px] h-2 w-2 shrink-0 ${DIAGNOSTIC_DOT[row.severity]}`} />
+                  <span>
+                    <span>{row.message}</span> <span className="opacity-70">{row.fix}</span>
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+    </div>
+  );
+});
+
 /**
  * Solve or Pool mode with no number typed anywhere has nothing to solve FOR,
  * so the board keeps showing plan figures and this banner says why, in the
@@ -7084,7 +7195,11 @@ const SolveModeNotice = memo(function SolveModeNotice({
   // A primitive out of each selector, so the role walk (per store write,
   // one subscriber) never re-renders on an unchanged answer.
   const asking = useFactoryStore(
-    (state) => state.project.solveMode === true && !hasAnySolveNumbers(state.project),
+    (state) =>
+      state.project.solveMode === true &&
+      // Pins that cannot all run answer nothing: the notice stays up beside
+      // the diagnostics that say why.
+      (!hasAnySolveNumbers(state.project) || state.lastResult?.solveStatus?.pinsInfeasible === true),
   );
   const poolMode = useFactoryStore((state) => state.project.poolMode === true);
   const missingCount = useFactoryStore((state) =>

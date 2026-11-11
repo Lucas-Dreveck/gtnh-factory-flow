@@ -13,8 +13,6 @@ import { AppFontRestore } from "@/components/AppFontRestore";
 import { UiScaleRestore } from "@/components/UiScaleRestore";
 import { uiScaleBootScript } from "@/lib/ui-scale-boot";
 import { COMPACT_MAX_HEIGHT, COMPACT_MAX_WIDTH, SNUG_MAX_WIDTH } from "@/lib/viewport-breakpoints";
-import { Analytics } from "./Analytics";
-import { AnalyticsHeartbeat } from "./AnalyticsHeartbeat";
 import { WhatsNewGate } from "@/components/WhatsNewGate";
 import { GlobalTitleTooltip } from "@/components/nei/GlobalTitleTooltip";
 import "./globals.css";
@@ -122,17 +120,7 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "/",
   },
-  robots: {
-    index: true,
-    follow: true,
-    googleBot: {
-      index: true,
-      follow: true,
-      "max-image-preview": "large",
-      "max-snippet": -1,
-      "max-video-preview": -1,
-    },
-  },
+  robots: { index: false, follow: false },
   keywords: [
     "GTNH Planner",
     "GregTech New Horizons planner",
@@ -243,8 +231,6 @@ export default function RootLayout({
         {/* Every `title` attribute in the app, worn as the planner's own
             tooltip: the browser's grey box never renders again. */}
         <GlobalTitleTooltip />
-        <Analytics />
-        <AnalyticsHeartbeat />
       </body>
     </html>
   );

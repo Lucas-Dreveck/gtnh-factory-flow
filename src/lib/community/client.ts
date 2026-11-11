@@ -174,11 +174,12 @@ export async function fetchCurrentUser(): Promise<CommunityUser | undefined> {
 export async function registerCommunityUser(
   username: string,
   password: string,
+  invite: string,
 ): Promise<CommunityUser> {
   const response = await fetch("/api/community/auth/register", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ username, password, invite }),
   });
   return parseJsonOrThrow<CommunityUser>(response);
 }
@@ -197,6 +198,16 @@ export async function loginCommunityUser(
 
 export async function logoutCommunityUser(): Promise<void> {
   await fetch("/api/community/auth/logout", { method: "POST" });
+}
+
+/** Changing the password signs every session out; the caller returns to /login. */
+export async function changeCommunityPassword(current: string, next: string): Promise<void> {
+  const response = await fetch("/api/community/auth/password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ current, next }),
+  });
+  await parseJsonOrThrow<{ ok: true }>(response);
 }
 
 /**
