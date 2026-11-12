@@ -22,6 +22,7 @@ import { getPowerMachineIcon } from "@/lib/power/planner-data";
 import { useFactoryStore, useRateDisplayUnits } from "@/store/factory-store";
 import { getEnergyHatchType } from "@/lib/machines/energy-hatches";
 import { getHatchAmps } from "@/lib/solver/power";
+import { PowerAmpsReadout } from "./PowerAmpsReadout";
 import { MinecraftTooltip } from "@/components/nei/MinecraftTooltip";
 
 /** A generator group's face in the list: the machine item the picker shows. */
@@ -161,6 +162,7 @@ export function MachineShoppingList() {
               peak={{ netEuT: totals.madeEuT - totals.euT }}
               average={{ netEuT: totals.avgMadeEuT - totals.avgEuT }}
             />
+            <PowerAmpsReadout entries={entries} result={lastResult} />
           </>
         ) : null}
       </div>

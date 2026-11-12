@@ -274,6 +274,7 @@ import {
 } from "./grid-edge-router";
 import { getRouterTuning, routerTuningKey, subscribeRouterTuning } from "./router-tuning";
 import { proxyPath } from "@/lib/board-arrange-optimize";
+import { arrangeByProductChains } from "@/lib/arrange-chains";
 import { routePoints } from "@/lib/route-metrics";
 import { registerBoardGeometryReader, registerBoardScoreReader } from "./board-score";
 import { flattenBoards } from "@/lib/model/flatten-boards";
@@ -5377,6 +5378,32 @@ export function FactoryFlow() {
     useFactoryStore.getState().frameBoardNodes();
   }, []);
 
+  // Arrange by product chains: one undoable move set, root-level cards only.
+  const handleChainArrange = useCallback(() => {
+    const state = useFactoryStore.getState();
+    const project = state.project;
+    const nodeById = new Map(project.nodes.map((node) => [node.id, node] as const));
+    const recipeById = new Map(project.recipes.map((recipe) => [recipe.id, recipe] as const));
+    const sizeOf = (id: string) => {
+      const measured = publishedBoardGeometryById.get(id);
+      const node = nodeById.get(id);
+      const estimate = node
+        ? estimateNodeCardSize(node, recipeById.get(node.recipeId), project)
+        : { width: STORAGE_NODE_WIDTH, height: STORAGE_NODE_HEIGHT };
+      return {
+        width: measured?.width ? snapSizeUpToGrid(measured.width) : estimate.width,
+        height: measured?.height ? snapSizeUpToGrid(measured.height) : estimate.height,
+      };
+    };
+    const { moves } = arrangeByProductChains(project, sizeOf, state.lastResult?.edges);
+    if (moves.length === 0) return;
+    state.applyBoardArrangement({
+      moves,
+      resetEdgeIds: project.edges.map((edge) => edge.id),
+    });
+    useFactoryStore.getState().frameBoardNodes();
+  }, []);
+
   // Stable references keep the memoized PaintToolbar from re-rendering on the
   // per-frame FactoryFlow renders a node drag produces.
   const handlePaintModeChange = useCallback(
@@ -6402,6 +6429,7 @@ export function FactoryFlow() {
         view={boardView}
         onViewChange={writeBoardView}
         onAutoArrange={handleAutoArrange}
+        onChainArrange={handleChainArrange}
         folded={toolbarFold.paint}
         foldAll={toolbarFold.paintFoldsAll}
         modesInBuild={toolbarFold.build}
@@ -8367,6 +8395,7 @@ const BoardViewMenu = memo(function BoardViewMenu({
     keepBoards: boolean;
     onToggleKeepBoards: () => void;
     onArrange: (options: { keepBoards: boolean }) => void;
+    onChainArrange: () => void;
   };
 }) {
   const { canvasPattern } = view;
@@ -8547,6 +8576,18 @@ const BoardViewMenu = memo(function BoardViewMenu({
               <Network className="h-4 w-4" />
               Arrange
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                onOpenChange(false);
+                arrange.onChainArrange();
+              }}
+              className="mt-1 flex w-full items-center justify-center gap-2 border-2 border-[var(--mc-15)] bg-[var(--mc-49)] p-2 font-mono text-[12px] font-black uppercase text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:brightness-110"
+              aria-label="Arrange the board by product chains"
+            >
+              <Network className="h-4 w-4" />
+              Arrange by product chains
+            </button>
           </div>
         </div>
       ) : null}
@@ -8672,6 +8713,7 @@ const PaintToolbar = memo(function PaintToolbar({
   view,
   onViewChange,
   onAutoArrange,
+  onChainArrange,
   folded,
   foldAll,
   modesInBuild,
@@ -8694,6 +8736,7 @@ const PaintToolbar = memo(function PaintToolbar({
   onViewChange: (patch: Partial<BoardView>) => void;
   /** Runs the arrange; the fold-out's setting rides along per press. */
   onAutoArrange: (options: { keepBoards: boolean }) => void;
+  onChainArrange: () => void;
   folded: boolean;
   /**
    * The whole row folds into the brush, the bin and whole-board keys
@@ -8905,7 +8948,7 @@ const PaintToolbar = memo(function PaintToolbar({
             onChange={onViewChange}
             open={isViewMenuOpen}
             onOpenChange={setViewMenuOpen}
-            arrange={{ keepBoards, onToggleKeepBoards, onArrange: onAutoArrange }}
+            arrange={{ keepBoards, onToggleKeepBoards, onArrange: onAutoArrange, onChainArrange }}
           />
         </ToolTray>
     </>

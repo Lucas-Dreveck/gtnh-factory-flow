@@ -1171,7 +1171,7 @@ function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEdito
   const hasPowerPicture = Boolean(
     powerArt ||
       powerMachineIcon?.iconPath ||
-      (!isCustomRateNode && previewMachineIcon?.iconPath),
+      (!isCustomRateNode && (previewMachineIcon?.iconPath || previewMachineIcon?.iconAtlas)),
   );
   // The outlines the card wears, innermost first. They stack: each ring starts
   // where the one inside it stops. Selection is innermost and painted on top,
@@ -3287,7 +3287,7 @@ function PowerStructureWindow({
   bare = false,
 }: {
   art?: string;
-  icon?: { id: string; displayName?: string; iconPath?: string; dominantColor?: string };
+  icon?: { id: string; displayName?: string; iconPath?: string; iconAtlas?: ResourceAmount["iconAtlas"]; dominantColor?: string };
   /** The colour behind the render: power amber, crop green, machine grey. */
   tint?: string;
   /** Handler id, tier and variant count the art was picked for (probes read it). */
@@ -3296,7 +3296,7 @@ function PowerStructureWindow({
   inline?: boolean;
   bare?: boolean;
 }) {
-  if (!art && !icon?.iconPath) {
+  if (!art && !icon?.iconPath && !icon?.iconAtlas) {
     return null;
   }
   // A deeper drop shadow than the glance art's: the picture sits between two
@@ -3329,6 +3329,7 @@ function PowerStructureWindow({
             amount: 1,
             displayName: icon!.displayName ?? icon!.id,
             iconPath: icon!.iconPath,
+            iconAtlas: icon!.iconAtlas,
             dominantColor: icon!.dominantColor,
           }}
           bare
