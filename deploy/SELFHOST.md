@@ -41,7 +41,7 @@ Abra `/login` → "criar conta" com o código ADMIN do log. Convites para outras
 | `GTNH_DATA_DIR` | `./var` | SQLite com contas, planos, histórico e `backups/` |
 | `GTNH_COOKIE_SECURE` | auto | `1` atrás de HTTPS; `0` em http puro |
 | `GTNH_ALLOWED_HOSTS` | (qualquer) | lista de hosts aceitos (proteção contra DNS rebinding) |
-| `GTNH_TRUST_PROXY` | `0` | `1` só atrás de proxy seu que define `X-Forwarded-For` |
+| `GTNH_TRUST_PROXY` | `0` | `cloudflare` atrás de Cloudflare Tunnel; `1` atrás de proxy seu que sobrescreve `X-Forwarded-For` |
 | `GTNH_BACKUP_HOURS` / `GTNH_BACKUP_KEEP` | `24` / `14` | cópias consistentes do banco |
 | `GTNH_PLAN_MAX_BYTES` | 32 MB | maior plano aceito |
 

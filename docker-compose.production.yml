@@ -20,7 +20,7 @@ services:
     environment:
       GTNH_COOKIE_SECURE: "1"          # the tunnel serves HTTPS
       GTNH_ALLOWED_HOSTS: "${GTNH_PUBLIC_HOST:-gtnh.dechotti.com.br},localhost:${GTNH_HOST_PORT:-3100},127.0.0.1:${GTNH_HOST_PORT:-3100}"
-      GTNH_TRUST_PROXY: "0"            # 1 only once client IPs behind the tunnel are verified to arrive in X-Forwarded-For
+      GTNH_TRUST_PROXY: "cloudflare"   # CF-Connecting-IP from cloudflared (port is loopback-only, so it cannot be forged)
       GTNH_BACKUP_HOURS: "24"
       GTNH_BACKUP_KEEP: "14"
       NODE_OPTIONS: "--max-old-space-size=2048"

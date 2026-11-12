@@ -21,6 +21,8 @@ const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const FAIL_WINDOW_MS = 15 * 60 * 1000;
 const FAIL_LIMIT_PER_USER = 8;
 const FAIL_LIMIT_PER_ADDRESS = 30;
+/** With no trusted proxy every client shares one key; limiting it would lock everyone out. */
+const SHARED_ADDRESS = "shared";
 
 export const USERNAME_PATTERN = /^[a-zA-Z0-9_-]{3,24}$/;
 export const PASSWORD_MIN = 10;
@@ -104,12 +106,25 @@ export function sessionCookie(request: Request, token: string | undefined): stri
 }
 
 /** The peer address. Only trust X-Forwarded-For when told a proxy sits in front. */
+/**
+ * The client address used for login throttling. Client headers are forgeable, so one is
+ * read only when GTNH_TRUST_PROXY names the proxy that sets it and the app is reachable
+ * through that proxy alone:
+ * - "cloudflare": CF-Connecting-IP (Cloudflare overwrites any client-sent value; the app
+ *   port must be loopback-only behind cloudflared).
+ * - "1": the first X-Forwarded-For hop (your own reverse proxy must overwrite it).
+ * Otherwise every request shares one key; the per-username limit still applies.
+ */
 export function clientAddress(request: Request): string {
-  if (process.env.GTNH_TRUST_PROXY === "1") {
+  const mode = process.env.GTNH_TRUST_PROXY;
+  if (mode === "cloudflare") {
+    const address = request.headers.get("cf-connecting-ip")?.trim();
+    if (address) return address.slice(0, 64);
+  } else if (mode === "1") {
     const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
     if (forwarded) return forwarded.slice(0, 64);
   }
-  return request.headers.get("x-real-ip")?.slice(0, 64) ?? "local";
+  return SHARED_ADDRESS;
 }
 
 // --- sessions ---------------------------------------------------------------
@@ -181,6 +196,10 @@ function recentFailures(key: string): number {
   return row.n;
 }
 
+function addressLimited(address: string): boolean {
+  return address !== SHARED_ADDRESS && recentFailures(`addr:${address}`) >= FAIL_LIMIT_PER_ADDRESS;
+}
+
 function recordFailure(keys: string[]): void {
   const db = getDb();
   const now = Date.now();
@@ -201,7 +220,7 @@ export function login(
 ): LoginResult {
   const userKey = `user:${username.toLowerCase()}`;
   const addressKey = `addr:${address}`;
-  if (recentFailures(userKey) >= FAIL_LIMIT_PER_USER || recentFailures(addressKey) >= FAIL_LIMIT_PER_ADDRESS) {
+  if (recentFailures(userKey) >= FAIL_LIMIT_PER_USER || addressLimited(address)) {
     return { ok: false, status: 429, error: "Too many failed attempts. Wait 15 minutes." };
   }
   const row = getDb()
@@ -211,7 +230,7 @@ export function login(
     | undefined;
   const valid = verifyPassword(password, row?.password_hash ?? DUMMY_HASH) && row && !row.disabled;
   if (!valid || !row) {
-    recordFailure([userKey, addressKey]);
+    recordFailure(address === SHARED_ADDRESS ? [userKey] : [userKey, addressKey]);
     return { ok: false, status: 401, error: "Wrong username or password." };
   }
   const user = { id: row.id, username: row.username, isAdmin: row.is_admin === 1 };
@@ -250,7 +269,7 @@ export function registerWithInvite(
     return { ok: false, status: 400, error: passwordProblem };
   }
   const addressKey = `addr:${address}`;
-  if (recentFailures(addressKey) >= FAIL_LIMIT_PER_ADDRESS) {
+  if (addressLimited(address)) {
     return { ok: false, status: 429, error: "Too many failed attempts. Wait 15 minutes." };
   }
   const db = getDb();
@@ -285,7 +304,7 @@ export function registerWithInvite(
     };
   });
   if (!result.ok) {
-    if (result.status === 403) recordFailure([addressKey]);
+    if (result.status === 403 && address !== SHARED_ADDRESS) recordFailure([addressKey]);
     return result;
   }
   return { ...result, token: createSession(result.user.id, userAgent) };

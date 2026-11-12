@@ -16,7 +16,7 @@ services:
     environment:
       GTNH_COOKIE_SECURE: "1"          # 1 behind HTTPS (tailscale serve / reverse proxy); 0 for plain http
       GTNH_ALLOWED_HOSTS: ""           # e.g. planner.tailnet-name.ts.net
-      GTNH_TRUST_PROXY: "0"            # 1 only behind a proxy you control that sets X-Forwarded-For
+      GTNH_TRUST_PROXY: "0"            # "cloudflare" behind cloudflared; "1" behind your own proxy that overwrites X-Forwarded-For
       GTNH_BACKUP_HOURS: "24"
       GTNH_BACKUP_KEEP: "14"
       NODE_OPTIONS: "--max-old-space-size=2048"
