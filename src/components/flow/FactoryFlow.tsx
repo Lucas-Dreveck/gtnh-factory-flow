@@ -274,7 +274,7 @@ import {
 } from "./grid-edge-router";
 import { getRouterTuning, routerTuningKey, subscribeRouterTuning } from "./router-tuning";
 import { proxyPath } from "@/lib/board-arrange-optimize";
-import { arrangeByProductChains } from "@/lib/arrange-chains";
+import { arrangeByProductChains, findChainGoals } from "@/lib/arrange-chains";
 import { routePoints } from "@/lib/route-metrics";
 import { registerBoardGeometryReader, registerBoardScoreReader } from "./board-score";
 import { flattenBoards } from "@/lib/model/flatten-boards";
@@ -5309,6 +5309,7 @@ export function FactoryFlow() {
   // lives on must not re-render per project edit.
   // The arrange in flight, for the loader; undefined when none is.
   const [arrangeProgress, setArrangeProgress] = useState<ArrangeProgress | undefined>(undefined);
+  const [chainNotice, setChainNotice] = useState<string | undefined>(undefined);
   const arrangeRunningRef = useRef(false);
   const handleAutoArrange = useCallback(async (options: { keepBoards: boolean }) => {
     // One at a time: a click while one runs is ignored.
@@ -5379,29 +5380,67 @@ export function FactoryFlow() {
   }, []);
 
   // Arrange by product chains: one undoable move set, root-level cards only.
-  const handleChainArrange = useCallback(() => {
-    const state = useFactoryStore.getState();
-    const project = state.project;
-    const nodeById = new Map(project.nodes.map((node) => [node.id, node] as const));
-    const recipeById = new Map(project.recipes.map((recipe) => [recipe.id, recipe] as const));
-    const sizeOf = (id: string) => {
-      const measured = publishedBoardGeometryById.get(id);
-      const node = nodeById.get(id);
-      const estimate = node
-        ? estimateNodeCardSize(node, recipeById.get(node.recipeId), project)
-        : { width: STORAGE_NODE_WIDTH, height: STORAGE_NODE_HEIGHT };
-      return {
-        width: measured?.width ? snapSizeUpToGrid(measured.width) : estimate.width,
-        height: measured?.height ? snapSizeUpToGrid(measured.height) : estimate.height,
+  const handleChainArrange = useCallback(
+    (options: { focus?: string; focusMin?: number; insertBuffers: boolean }) => {
+      const state = useFactoryStore.getState();
+      const project = state.project;
+      const nodeById = new Map(project.nodes.map((node) => [node.id, node] as const));
+      const recipeById = new Map(project.recipes.map((recipe) => [recipe.id, recipe] as const));
+      const sizeOf = (id: string) => {
+        const measured = publishedBoardGeometryById.get(id);
+        const node = nodeById.get(id);
+        const estimate = node
+          ? estimateNodeCardSize(node, recipeById.get(node.recipeId), project)
+          : { width: STORAGE_NODE_WIDTH, height: STORAGE_NODE_HEIGHT };
+        return {
+          width: measured?.width ? snapSizeUpToGrid(measured.width) : estimate.width,
+          height: measured?.height ? snapSizeUpToGrid(measured.height) : estimate.height,
+        };
       };
-    };
-    const { moves } = arrangeByProductChains(project, sizeOf, state.lastResult?.edges);
-    if (moves.length === 0) return;
-    state.applyBoardArrangement({
-      moves,
-      resetEdgeIds: project.edges.map((edge) => edge.id),
-    });
-    useFactoryStore.getState().frameBoardNodes();
+      setChainNotice(undefined);
+      const result = arrangeByProductChains(project, sizeOf, state.lastResult?.edges, {
+        focus: options.focus,
+        focusMin: options.focusMin,
+        insertBuffers: options.insertBuffers,
+      });
+      if (result.moves.length === 0) return;
+      // Inserted drawers and wires ride the same undo entry as the moves.
+      const before = new Set((project.storages ?? []).map((storage) => storage.id));
+      const beforeEdges = new Set(project.edges.map((edge) => edge.id));
+      const after = result.project;
+      state.applyBoardArrangement({
+        moves: result.moves,
+        resetEdgeIds: project.edges.map((edge) => edge.id),
+        ...(after
+          ? {
+              addStorages: (after.storages ?? []).filter((storage) => !before.has(storage.id)),
+              addEdges: after.edges.filter((edge) => !beforeEdges.has(edge.id)),
+              removeEdgeIds: project.edges
+                .filter((edge) => !after.edges.some((kept) => kept.id === edge.id))
+                .map((edge) => edge.id),
+            }
+          : undefined),
+      });
+      if (result.focusCardIds?.length) {
+        setPendingBoardSelection(result.focusCardIds);
+        setSelectedNodeIds(result.focusCardIds);
+        setSelectedEdgeIds([]);
+        useFactoryStore.getState().frameBoardNodes(result.focusCardIds);
+      } else {
+        useFactoryStore.getState().frameBoardNodes();
+      }
+      if (options.insertBuffers && result.buffersMessage) {
+        setChainNotice(result.buffersMessage);
+      }
+    },
+    [setPendingBoardSelection],
+  );
+  const getChainGoals = useCallback(() => {
+    const state = useFactoryStore.getState();
+    return findChainGoals(state.project, state.lastResult?.edges).map((goal) => ({
+      value: goal.id,
+      label: goal.name,
+    }));
   }, []);
 
   // Stable references keep the memoized PaintToolbar from re-rendering on the
@@ -6430,6 +6469,8 @@ export function FactoryFlow() {
         onViewChange={writeBoardView}
         onAutoArrange={handleAutoArrange}
         onChainArrange={handleChainArrange}
+        getChainGoals={getChainGoals}
+        chainNotice={chainNotice}
         folded={toolbarFold.paint}
         foldAll={toolbarFold.paintFoldsAll}
         modesInBuild={toolbarFold.build}
@@ -8395,13 +8436,20 @@ const BoardViewMenu = memo(function BoardViewMenu({
     keepBoards: boolean;
     onToggleKeepBoards: () => void;
     onArrange: (options: { keepBoards: boolean }) => void;
-    onChainArrange: () => void;
+    onChainArrange: (options: { focus?: string; focusMin?: number; insertBuffers: boolean }) => void;
+    getChainGoals: () => Array<{ value: string; label: string }>;
+    chainNotice?: string;
   };
 }) {
   const { canvasPattern } = view;
   // Motion is device taste, not plan state: read and written through its own
   // store (board-motion.tsx), never through the plan-view snapshot.
   const boardMotion = useBoardMotion();
+  const [chainOpen, setChainOpen] = useState(false);
+  const [chainFocus, setChainFocus] = useState("");
+  const [chainBuffers, setChainBuffers] = useState(false);
+  const [chainMin, setChainMin] = useState(0.5);
+  const [chainGoals, setChainGoals] = useState<Array<{ value: string; label: string }>>([]);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const closeSheet = useCallback(() => onOpenChange(false), [onOpenChange]);
   useFoldoutDismiss(open, rootRef, closeSheet);
@@ -8579,15 +8627,77 @@ const BoardViewMenu = memo(function BoardViewMenu({
             <button
               type="button"
               onClick={() => {
-                onOpenChange(false);
-                arrange.onChainArrange();
+                if (!chainOpen) setChainGoals(arrange.getChainGoals());
+                setChainOpen((v) => !v);
               }}
+              aria-expanded={chainOpen}
               className="mt-1 flex w-full items-center justify-center gap-2 border-2 border-[var(--mc-15)] bg-[var(--mc-49)] p-2 font-mono text-[12px] font-black uppercase text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:brightness-110"
               aria-label="Arrange the board by product chains"
             >
               <Network className="h-4 w-4" />
               Arrange by product chains
             </button>
+            {chainOpen ? (
+              <div className="mt-1 flex flex-col gap-2 border-2 border-[var(--mc-15)] bg-[var(--mc-49)] p-2">
+                <label className="flex flex-col gap-1 text-[11px] font-semibold text-[var(--mc-ink)]">
+                  Focus
+                  <select
+                    value={chainFocus}
+                    onChange={(event) => setChainFocus(event.target.value)}
+                    className="border-2 border-[var(--mc-15)] bg-[var(--mc-61)] p-1 text-[11px] text-[var(--mc-ink)]"
+                  >
+                    <option value="">None</option>
+                    {chainGoals.map((goal) => (
+                      <option key={goal.value} value={goal.value}>
+                        {goal.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {chainFocus ? (
+                  <label className="flex flex-col gap-1 text-[11px] font-semibold text-[var(--mc-ink)]">
+                    Focus strength
+                    <select
+                      value={chainMin}
+                      onChange={(event) => setChainMin(Number(event.target.value))}
+                      className="border-2 border-[var(--mc-15)] bg-[var(--mc-61)] p-1 text-[11px] text-[var(--mc-ink)]"
+                    >
+                      <option value={0.75}>Strict: cards that mostly serve it</option>
+                      <option value={0.5}>Normal: cards that serve it at least half</option>
+                      <option value={0.1}>Wide: cards that serve it at all</option>
+                    </select>
+                  </label>
+                ) : null}
+                <label className="flex items-start gap-2 text-[11px] font-semibold leading-tight text-[var(--mc-ink)]">
+                  <input
+                    type="checkbox"
+                    checked={chainBuffers}
+                    onChange={(event) => setChainBuffers(event.target.checked)}
+                    className="mt-0.5"
+                  />
+                  Add buffer drawers between chains (only if numbers stay the same)
+                </label>
+                {arrange.chainNotice ? (
+                  <p className="text-[11px] leading-tight text-[var(--mc-ink)]" role="status">
+                    {arrange.chainNotice}
+                  </p>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => {
+                    arrange.onChainArrange({
+                      focus: chainFocus || undefined,
+                      focusMin: chainMin,
+                      insertBuffers: chainBuffers,
+                    });
+                  }}
+                  className="flex w-full items-center justify-center gap-2 border-2 border-[var(--mc-15)] bg-[var(--mc-49)] p-2 font-mono text-[12px] font-black uppercase text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:brightness-110"
+                  aria-label="Run arrange by product chains"
+                >
+                  Arrange
+                </button>
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -8714,6 +8824,8 @@ const PaintToolbar = memo(function PaintToolbar({
   onViewChange,
   onAutoArrange,
   onChainArrange,
+  getChainGoals,
+  chainNotice,
   folded,
   foldAll,
   modesInBuild,
@@ -8736,7 +8848,9 @@ const PaintToolbar = memo(function PaintToolbar({
   onViewChange: (patch: Partial<BoardView>) => void;
   /** Runs the arrange; the fold-out's setting rides along per press. */
   onAutoArrange: (options: { keepBoards: boolean }) => void;
-  onChainArrange: () => void;
+  onChainArrange: (options: { focus?: string; focusMin?: number; insertBuffers: boolean }) => void;
+  getChainGoals: () => Array<{ value: string; label: string }>;
+  chainNotice?: string;
   folded: boolean;
   /**
    * The whole row folds into the brush, the bin and whole-board keys
@@ -8948,7 +9062,14 @@ const PaintToolbar = memo(function PaintToolbar({
             onChange={onViewChange}
             open={isViewMenuOpen}
             onOpenChange={setViewMenuOpen}
-            arrange={{ keepBoards, onToggleKeepBoards, onArrange: onAutoArrange, onChainArrange }}
+            arrange={{
+              keepBoards,
+              onToggleKeepBoards,
+              onArrange: onAutoArrange,
+              onChainArrange,
+              getChainGoals,
+              chainNotice,
+            }}
           />
         </ToolTray>
     </>

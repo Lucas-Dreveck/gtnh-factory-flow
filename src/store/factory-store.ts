@@ -602,6 +602,10 @@ interface FactoryStore {
     removeBoards?: string[];
     /** Paper for boards that had none; hand-picked papers are kept. */
     setBoardThemes?: Array<{ id: string; theme: string }>;
+    /** Drawers and wires the arrange inserted (chain buffers); same undo entry. */
+    addStorages?: FactoryStorage[];
+    addEdges?: FactoryEdge[];
+    removeEdgeIds?: string[];
   }) => void;
   /**
    * Delete a whole selection as a single undo entry. `nodeIds` may hold any
@@ -3176,6 +3180,9 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
     setOwners,
     setBoardThemes,
     removeBoards,
+    addStorages,
+    addEdges,
+    removeEdgeIds,
   }) => {
     set((state) => {
       const positionById = new Map(moves.map((move) => [move.id, move.position] as const));
@@ -3212,7 +3219,11 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
         });
 
       const nodes = applyMoves(state.project.nodes);
-      const storages = state.project.storages ? applyMoves(state.project.storages) : undefined;
+      let storages = state.project.storages ? applyMoves(state.project.storages) : undefined;
+      if (addStorages && addStorages.length > 0) {
+        changed = true;
+        storages = [...(storages ?? []), ...addStorages.map((s) => ({ ...s, position: positionById.get(s.id) ?? s.position }))];
+      }
       if (addBoards && addBoards.length > 0) {
         changed = true;
       }
@@ -3278,7 +3289,15 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
       const waypointsById = new Map(
         (setWaypoints ?? []).map((entry) => [entry.id, entry.waypoints] as const),
       );
-      const edges = state.project.edges.map((edge) => {
+      const doomedEdges = new Set(removeEdgeIds ?? []);
+      const edges = [
+        ...state.project.edges.filter((edge) => {
+          if (!doomedEdges.has(edge.id)) return true;
+          changed = true;
+          return false;
+        }),
+        ...(addEdges ?? []),
+      ].map((edge) => {
         const lane = waypointsById.get(edge.id);
         if (lane) {
           changed = true;
