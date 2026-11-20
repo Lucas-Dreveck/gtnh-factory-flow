@@ -20,6 +20,11 @@ board; Gemini may look recipes up and may propose board changes the player appli
 - `action-parse.ts` is the only door from a tool call to an action: a missing id, a
   fractional machine count or a card wired to itself is dropped there. `request.ts` bounds
   the body, because every ask is a paid request.
+- The whole ask answers inside `ASK_BUDGET_MS` (45 s), tool rounds included, and each
+  round is capped again. A proxy in front of the app gives up around 100 s and hands the
+  player its own bad gateway page with nothing in it; the route must always get there
+  first, even if the answer is that it ran out of time. Every path out of the fetch
+  returns a sentence: an unhandled reject IS that gateway page.
 - Nothing is persisted. A conversation about one board is worthless against another, and a
   reload is the one moment a player can be sure the panel is empty.
 - Exams: `action-parse.test.ts`, `board-snapshot.test.ts`.

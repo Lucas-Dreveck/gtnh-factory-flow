@@ -15,7 +15,16 @@ const DEFAULT_MODEL = "gemini-2.5-flash";
  * it is looping rather than answering, and every round is a paid request.
  */
 const MAX_TURNS = 6;
-const REQUEST_TIMEOUT_MS = 60_000;
+/**
+ * The whole ask, tool rounds included, must answer inside this. A proxy in
+ * front of the app gives up long before six slow rounds do and hands the
+ * player a bad gateway page with nothing in it; an answer that says it ran out
+ * of time is worth more than that. Well under the 100 s a Cloudflare tunnel
+ * allows an origin.
+ */
+const ASK_BUDGET_MS = 45_000;
+/** One round's own ceiling, so a single stalled call cannot eat the budget. */
+const REQUEST_TIMEOUT_MS = 25_000;
 
 export interface GeminiFunctionDeclaration {
   name: string;
@@ -89,9 +98,17 @@ export async function runGeminiToolLoop(
 
   const contents = [...request.contents];
   const texts: string[] = [];
+  const deadline = Date.now() + ASK_BUDGET_MS;
 
   for (let turn = 1; turn <= MAX_TURNS; turn += 1) {
-    const parts = await callGemini(key, {
+    // Checked before each round, not only at the end: the budget exists to
+    // answer the player, so a round that cannot finish inside it is not started.
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      return { text: outOfTime(texts), turns: turn - 1 };
+    }
+
+    const parts = await callGemini(key, Math.min(remaining, REQUEST_TIMEOUT_MS), {
       systemInstruction: { parts: [{ text: request.systemInstruction }] },
       contents,
       tools: request.tools.length > 0 ? [{ functionDeclarations: request.tools }] : undefined,
@@ -128,12 +145,38 @@ export async function runGeminiToolLoop(
   return { text: texts.join("\n").trim(), turns: MAX_TURNS };
 }
 
-async function callGemini(key: string, body: unknown): Promise<GeminiPart[]> {
+/**
+ * What the player gets when the budget ran out: whatever the model had already
+ * said, and a line saying it stopped there. An empty hand is an error instead,
+ * so the panel does not show a blank answer.
+ */
+function outOfTime(texts: string[]): string {
+  const said = texts.join("\n").trim();
+  if (said.length === 0) {
+    throw new GeminiError("Gemini took too long. Ask again, or ask something smaller.");
+  }
+  return `${said}\n\nI ran out of time before finishing. Ask again for the rest.`;
+}
+
+async function callGemini(
+  key: string,
+  timeoutMs: number,
+  body: unknown,
+): Promise<GeminiPart[]> {
   const response = await fetch(`${GEMINI_ENDPOINT}/${encodeURIComponent(geminiModel())}:generateContent`, {
     method: "POST",
     headers: { "content-type": "application/json", "x-goog-api-key": key },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    signal: AbortSignal.timeout(timeoutMs),
+  }).catch((error: unknown) => {
+    // A timeout and a dead network both arrive here. Either way the route must
+    // answer the browser: an unhandled reject is the bad gateway page.
+    console.error("[assistant/gemini] request failed", error);
+    throw new GeminiError(
+      error instanceof Error && error.name === "TimeoutError"
+        ? "Gemini took too long. Ask again, or ask something smaller."
+        : "Gemini could not be reached from this server.",
+    );
   });
 
   if (!response.ok) {

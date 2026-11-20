@@ -78,6 +78,10 @@ export const useAssistantStore = create<AssistantStore>((set, get) => ({
       const response = await fetch("/api/assistant", {
         method: "POST",
         headers: { "content-type": "application/json" },
+        // Longer than the server's own budget for one ask, so the panel's
+        // apology is normally the server's sentence, not this bare one. It is
+        // here for the case the answer never arrives at all.
+        signal: AbortSignal.timeout(75_000),
         body: JSON.stringify({
           datasetVersionId,
           messages,
@@ -88,7 +92,17 @@ export const useAssistantStore = create<AssistantStore>((set, get) => ({
         | (AssistantReply & { error?: string })
         | undefined;
       if (!response.ok || !payload || payload.error) {
-        set({ isAsking: false, error: payload?.error ?? "The assistant could not answer." });
+        // No JSON body means the answer never reached this app: a proxy in
+        // front of it gave up and sent its own page. Saying so is the
+        // difference between "ask again" and "go and look at the server".
+        set({
+          isAsking: false,
+          error:
+            payload?.error ??
+            (payload
+              ? "The assistant could not answer."
+              : `The server did not answer the assistant (${response.status}). Try again in a minute.`),
+        });
         return;
       }
       set((state) => ({
@@ -104,8 +118,14 @@ export const useAssistantStore = create<AssistantStore>((set, get) => ({
           },
         ],
       }));
-    } catch {
-      set({ isAsking: false, error: "The assistant could not be reached." });
+    } catch (error) {
+      set({
+        isAsking: false,
+        error:
+          error instanceof Error && error.name === "TimeoutError"
+            ? "The assistant did not answer in time. Ask again, or ask something smaller."
+            : "The assistant could not be reached.",
+      });
     }
   },
 }));
