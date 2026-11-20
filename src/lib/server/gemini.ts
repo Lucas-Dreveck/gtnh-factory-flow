@@ -80,6 +80,37 @@ export function geminiModel(): string {
   return process.env.GEMINI_MODEL?.trim() || DEFAULT_MODEL;
 }
 
+/**
+ * The model names THIS key may call `generateContent` on. A 404 on an ask is
+ * almost always a name that does not exist for the key, and the names move
+ * between Gemini releases, so the only honest answer is the one the API gives.
+ */
+export async function listGeminiModels(): Promise<string[]> {
+  const key = geminiApiKey();
+  if (!key) {
+    throw new GeminiError("No Gemini key is configured on this server.");
+  }
+  const response = await fetch(`${GEMINI_ENDPOINT}?pageSize=200`, {
+    headers: { "x-goog-api-key": key },
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  }).catch((error: unknown) => {
+    console.error("[assistant/gemini] model listing failed", error);
+    throw new GeminiError("Gemini could not be reached from this server.");
+  });
+  if (!response.ok) {
+    console.error("[assistant/gemini] model listing", response.status, await response.text().catch(() => ""));
+    throw new GeminiError("Gemini would not list its models for this key.");
+  }
+  const payload = (await response.json()) as {
+    models?: Array<{ name?: string; supportedGenerationMethods?: string[] }>;
+  };
+  return (payload.models ?? [])
+    .filter((model) => model.supportedGenerationMethods?.includes("generateContent"))
+    .map((model) => model.name?.replace(/^models\//, "") ?? "")
+    .filter((name) => name.length > 0)
+    .sort();
+}
+
 export function buildUserContent(text: string): GeminiContent {
   return { role: "user", parts: [{ text }] };
 }
@@ -185,7 +216,13 @@ async function callGemini(
     throw new GeminiError(
       response.status === 429
         ? "Gemini is rate limiting this key. Try again in a minute."
-        : "Gemini did not answer.",
+        : response.status === 404
+          ? // The one failure a server owner can fix alone, so it says the
+            // name that failed and where the real names are listed.
+            `Gemini has no model named "${geminiModel()}" for this key. Set GEMINI_MODEL to one of the names at /api/assistant.`
+          : response.status === 400 || response.status === 403
+            ? "Gemini refused this key. Check GEMINI_API_KEY."
+            : "Gemini did not answer.",
     );
   }
 

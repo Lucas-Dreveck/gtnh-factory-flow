@@ -10,6 +10,7 @@ import {
   buildUserContent,
   geminiApiKey,
   geminiModel,
+  listGeminiModels,
   runGeminiToolLoop,
   type GeminiFunctionDeclaration,
 } from "@/lib/server/gemini";
@@ -21,6 +22,29 @@ import type { Recipe } from "@/lib/model/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+/**
+ * What this server can actually run: the model it is set to, and the names the
+ * key may call. A 404 from Gemini means the name does not exist for the key,
+ * and the names move between releases, so the server owner needs to be able to
+ * read the real list off the running instance rather than guess.
+ */
+export async function GET(request: Request) {
+  const session = sessionOr401(request);
+  if ("response" in session) return session.response;
+  if (!geminiApiKey()) {
+    return fail(503, "No Gemini key is configured on this server.");
+  }
+  try {
+    const models = await listGeminiModels();
+    return json({ model: geminiModel(), usable: models.includes(geminiModel()), models });
+  } catch (error) {
+    if (error instanceof GeminiError) {
+      return fail(502, error.message);
+    }
+    return serverError("assistant/models", error, "The model list could not be read.");
+  }
+}
 
 /** How many board actions one answer may propose. A longer list is a plan, not a step. */
 const ACTION_LIMIT = 12;
