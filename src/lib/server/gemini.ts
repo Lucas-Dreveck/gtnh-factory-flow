@@ -7,8 +7,20 @@
  * model replies with text or the turn budget runs out.
  */
 
-const GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models";
-const DEFAULT_MODEL = "gemini-2.5-flash";
+const GEMINI_HOST = "https://generativelanguage.googleapis.com";
+/**
+ * The API version the paths are built on. Configurable because Google retires
+ * one and a model that is still LISTED can stop answering on it, which reads
+ * as a 404 on the ask and nothing else; a server owner must be able to move
+ * without a new build.
+ */
+const DEFAULT_API_VERSION = "v1beta";
+/**
+ * A floating alias, not a pinned version: this fork is deployed rarely, and a
+ * pinned name ages out of the API between deploys. `GEMINI_MODEL` pins one
+ * when that is wanted.
+ */
+const DEFAULT_MODEL = "gemini-flash-latest";
 /**
  * How many times the model may come back for another tool round. Recipe work
  * is a search, a look at the result and sometimes a second search; past this
@@ -77,20 +89,33 @@ export function geminiApiKey(): string | undefined {
 }
 
 export function geminiModel(): string {
-  return process.env.GEMINI_MODEL?.trim() || DEFAULT_MODEL;
+  // The API lists its models as "models/<name>" and takes them in the path as
+  // the bare name. Copying a listed line into GEMINI_MODEL is the obvious
+  // thing to do, and the encoded slash it would make reads as a plain 404.
+  const configured = process.env.GEMINI_MODEL?.trim().replace(/^models\//, "");
+  return configured && configured.length > 0 ? configured : DEFAULT_MODEL;
+}
+
+export function geminiApiVersion(): string {
+  const configured = process.env.GEMINI_API_VERSION?.trim();
+  return configured && /^v[0-9a-z]+$/.test(configured) ? configured : DEFAULT_API_VERSION;
+}
+
+function modelsEndpoint(): string {
+  return `${GEMINI_HOST}/${geminiApiVersion()}/models`;
 }
 
 /**
- * The model names THIS key may call `generateContent` on. A 404 on an ask is
- * almost always a name that does not exist for the key, and the names move
- * between Gemini releases, so the only honest answer is the one the API gives.
+ * The model names THIS key may call `generateContent` on, on the API version
+ * this server is set to. The names move between Gemini releases, so the only
+ * honest answer is the one the API gives.
  */
 export async function listGeminiModels(): Promise<string[]> {
   const key = geminiApiKey();
   if (!key) {
     throw new GeminiError("No Gemini key is configured on this server.");
   }
-  const response = await fetch(`${GEMINI_ENDPOINT}?pageSize=200`, {
+  const response = await fetch(`${modelsEndpoint()}?pageSize=200`, {
     headers: { "x-goog-api-key": key },
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   }).catch((error: unknown) => {
@@ -194,7 +219,7 @@ async function callGemini(
   timeoutMs: number,
   body: unknown,
 ): Promise<GeminiPart[]> {
-  const response = await fetch(`${GEMINI_ENDPOINT}/${encodeURIComponent(geminiModel())}:generateContent`, {
+  const response = await fetch(`${modelsEndpoint()}/${encodeURIComponent(geminiModel())}:generateContent`, {
     method: "POST",
     headers: { "content-type": "application/json", "x-goog-api-key": key },
     body: JSON.stringify(body),
@@ -212,14 +237,17 @@ async function callGemini(
 
   if (!response.ok) {
     // The body carries the key's quota and project, so it stays in the log.
-    console.error("[assistant/gemini]", response.status, await response.text().catch(() => ""));
+    // Collapsed to ONE line: Google's error body is pretty-printed JSON, and a
+    // `grep assistant` over the container log would show only its first brace.
+    const detail = (await response.text().catch(() => "")).replace(/\s+/g, " ").slice(0, 600);
+    console.error("[assistant/gemini]", response.status, detail);
     throw new GeminiError(
       response.status === 429
         ? "Gemini is rate limiting this key. Try again in a minute."
         : response.status === 404
           ? // The one failure a server owner can fix alone, so it says the
             // name that failed and where the real names are listed.
-            `Gemini has no model named "${geminiModel()}" for this key. Set GEMINI_MODEL to one of the names at /api/assistant.`
+            `Gemini would not run "${geminiModel()}" on ${geminiApiVersion()}. Open /api/assistant for the names this key can use, and set GEMINI_MODEL or GEMINI_API_VERSION.`
           : response.status === 400 || response.status === 403
             ? "Gemini refused this key. Check GEMINI_API_KEY."
             : "Gemini did not answer.",

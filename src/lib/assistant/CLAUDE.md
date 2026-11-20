@@ -6,9 +6,13 @@ board; Gemini may look recipes up and may propose board changes the player appli
 - `GEMINI_API_KEY` unset switches the whole thing off: the route answers 503 and the panel
   says so. `GEMINI_MODEL` picks the model. The key never reaches the browser, and the CSP
   allows no outbound connection but this site, so the call can only happen server side.
-- A 404 from Gemini is a model name that does not exist for that key, and the names move
-  between releases. `GET /api/assistant` lists the names the key may call `generateContent`
-  on, read off the API; never hard-code a list or guess one into a message.
+- A 404 from Gemini is the model NAME or the API VERSION, and both move between releases:
+  a model that `ListModels` still shows can stop answering on an older version. Both are
+  env (`GEMINI_MODEL`, `GEMINI_API_VERSION`), and `GET /api/assistant` reports what this
+  server is set to beside the names the key may call. Never hard-code a list of models or
+  guess one into a message, and never name a model in copy that the API has not confirmed.
+- The default model is a floating alias (`gemini-flash-latest`), not a pinned version:
+  this fork deploys rarely and a pinned name ages out of the API between deploys.
 - `board-snapshot.ts` builds the photo of the board the model reads: names, counts, wires,
   drawers and the solve's verdicts, capped at `SNAPSHOT_NODE_LIMIT` cards. No positions,
   no icons, no runtime tables. `prompt.ts` turns it into plain lines, which the model reads

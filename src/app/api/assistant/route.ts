@@ -9,6 +9,7 @@ import {
   buildModelContent,
   buildUserContent,
   geminiApiKey,
+  geminiApiVersion,
   geminiModel,
   listGeminiModels,
   runGeminiToolLoop,
@@ -24,10 +25,10 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * What this server can actually run: the model it is set to, and the names the
- * key may call. A 404 from Gemini means the name does not exist for the key,
- * and the names move between releases, so the server owner needs to be able to
- * read the real list off the running instance rather than guess.
+ * What this server can actually run: the API version and model it is set to,
+ * and the names the key may call. A 404 on an ask is either name or version,
+ * and both move between Gemini releases, so the server owner reads the real
+ * list off the running instance rather than guessing from documentation.
  */
 export async function GET(request: Request) {
   const session = sessionOr401(request);
@@ -37,7 +38,12 @@ export async function GET(request: Request) {
   }
   try {
     const models = await listGeminiModels();
-    return json({ model: geminiModel(), usable: models.includes(geminiModel()), models });
+    return json({
+      apiVersion: geminiApiVersion(),
+      model: geminiModel(),
+      usable: models.includes(geminiModel()),
+      models,
+    });
   } catch (error) {
     if (error instanceof GeminiError) {
       return fail(502, error.message);
