@@ -21,6 +21,7 @@ before changing that area; it names the tests that pin its behaviour.
 | Power generation | `src/lib/power/CLAUDE.md` |
 | Designs, tabs, saving, account sync, plan import/export, public view | `src/store/CLAUDE.md` |
 | Server, recipe API, Supabase | `src/lib/server/CLAUDE.md` |
+| Gemini assistant: corner button, side panel, board actions | `src/lib/assistant/CLAUDE.md` |
 | Dataset pipeline: export, normalize, rebuild, publish | `tools/dataset-pipeline/CLAUDE.md` |
 
 Longer references, read on demand: `docs/solver-equations.md` (solver doctrine),

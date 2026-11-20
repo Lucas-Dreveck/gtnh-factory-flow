@@ -23,6 +23,8 @@ services:
       GTNH_TRUST_PROXY: "cloudflare"   # CF-Connecting-IP from cloudflared (port is loopback-only, so it cannot be forged)
       GTNH_BACKUP_HOURS: "24"
       GTNH_BACKUP_KEEP: "14"
+      GEMINI_API_KEY: "${GEMINI_API_KEY:-}"   # the assistant panel; unset leaves it switched off
+      GEMINI_MODEL: "${GEMINI_MODEL:-gemini-2.5-flash}"
       NODE_OPTIONS: "--max-old-space-size=2048"
     volumes:
       - planner-data:/data

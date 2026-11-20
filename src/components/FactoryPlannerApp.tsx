@@ -31,6 +31,7 @@ import { startDesignTabSync } from "@/store/design-store";
 import { useLibraryTab } from "@/lib/library/library-tab";
 import { useWelcomeTab } from "@/lib/welcome/welcome-tab";
 import { AppHeader } from "./AppHeader";
+import { AssistantDock } from "./assistant/AssistantDock";
 import { LibraryPage } from "./library/LibraryPage";
 import { WelcomePage } from "./welcome/WelcomePage";
 import { PlanIdentityDrawer } from "./PlanIdentityDrawer";
@@ -303,11 +304,18 @@ export function FactoryPlannerApp() {
       <PlacementRevealer />
       <SharedAddressSync />
       <AppHeader onLoadDatasetVersion={loadDatasetVersion} />
-      {isCompact ? (
-        <CompactWorkspace workspace={workspace} onLoadDatasetVersion={loadDatasetVersion} />
-      ) : (
-        <ColumnWorkspace workspace={workspace} onLoadDatasetVersion={loadDatasetVersion} />
-      )}
+      {/* The workspace is the assistant's box: `relative` here keeps its
+          corner button and side panel below the header and inside the shell's
+          pixel space. A `fixed` child of a CSS-zoomed box is positioned in the
+          zoomed space, which lands somewhere else at every interface scale. */}
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        {isCompact ? (
+          <CompactWorkspace workspace={workspace} onLoadDatasetVersion={loadDatasetVersion} />
+        ) : (
+          <ColumnWorkspace workspace={workspace} onLoadDatasetVersion={loadDatasetVersion} />
+        )}
+        <BoardAssistant />
+      </div>
       {/* The power source picker portals to the body, so it works from either
           layout and outranks the drawers on compact. */}
       <PowerSourceOverlay />
@@ -315,6 +323,19 @@ export function FactoryPlannerApp() {
           overwrite) confirms through this one dialog. */}
     </div>
   );
+}
+
+/**
+ * The assistant answers about the BOARD, so it is not there while a page
+ * covers it: its button would float over the Welcome tab or the shelf with
+ * nothing behind it to talk about.
+ */
+function BoardAssistant() {
+  const covering = useCoveringPage();
+  if (covering) {
+    return null;
+  }
+  return <AssistantDock />;
 }
 
 interface WorkspaceProps {

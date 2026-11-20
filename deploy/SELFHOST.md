@@ -44,6 +44,8 @@ Abra `/login` → "criar conta" com o código ADMIN do log. Convites para outras
 | `GTNH_TRUST_PROXY` | `0` | `cloudflare` atrás de Cloudflare Tunnel; `1` atrás de proxy seu que sobrescreve `X-Forwarded-For` |
 | `GTNH_BACKUP_HOURS` / `GTNH_BACKUP_KEEP` | `24` / `14` | cópias consistentes do banco |
 | `GTNH_PLAN_MAX_BYTES` | 32 MB | maior plano aceito |
+| `GEMINI_API_KEY` | (vazio) | liga o assistente no canto da tela; sem chave o painel avisa que esta desligado |
+| `GEMINI_MODEL` | `gemini-2.5-flash` | modelo usado nas perguntas do assistente |
 
 ## Atualizar e backup
 - Atualizar: `git pull && docker compose up -d --build` (os dados ficam no volume `planner-data`).

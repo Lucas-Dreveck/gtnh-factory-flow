@@ -1,0 +1,25 @@
+# The Gemini assistant (src/lib/assistant, src/components/assistant, /api/assistant)
+
+One corner button on the shell, one side panel, one route. The player asks about the open
+board; Gemini may look recipes up and may propose board changes the player applies.
+
+- `GEMINI_API_KEY` unset switches the whole thing off: the route answers 503 and the panel
+  says so. `GEMINI_MODEL` picks the model. The key never reaches the browser, and the CSP
+  allows no outbound connection but this site, so the call can only happen server side.
+- `board-snapshot.ts` builds the photo of the board the model reads: names, counts, wires,
+  drawers and the solve's verdicts, capped at `SNAPSHOT_NODE_LIMIT` cards. No positions,
+  no icons, no runtime tables. `prompt.ts` turns it into plain lines, which the model reads
+  far better than JSON.
+- The photo is rebuilt on EVERY ask and only the words are kept in the history, so a
+  question asked after an edit is answered against the board as it is now.
+- Recipe and item lookups run on the server (`queryDatasetRecipes`, `queryDatasetResources`):
+  the dataset is there, and a recipe id cannot be guessed. The model is told to search first.
+- Board changes come back as ACTIONS, never applied by the route. `apply-actions.ts` checks
+  each one against the live board again and skips what no longer fits, saying why. Each
+  action is an ordinary store action, so undo walks back through them one at a time.
+- `action-parse.ts` is the only door from a tool call to an action: a missing id, a
+  fractional machine count or a card wired to itself is dropped there. `request.ts` bounds
+  the body, because every ask is a paid request.
+- Nothing is persisted. A conversation about one board is worthless against another, and a
+  reload is the one moment a player can be sure the panel is empty.
+- Exams: `action-parse.test.ts`, `board-snapshot.test.ts`.
